@@ -25,10 +25,10 @@ import cmath
 import time
 
 # constants
-rotatechange = 0.1
-speedchange = 0.05
+rotatechange = 0.5
+speedchange = 0.10
 occ_bins = [-1, 0, 100, 101]
-stop_distance = 0.25
+stop_distance = 0.20
 front_angle = 30
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
@@ -121,7 +121,7 @@ class AutoNav(Node):
         # self.occdata = np.uint8(oc2.reshape(msg.info.height,msg.info.width,order='F'))
         self.occdata = np.uint8(oc2.reshape(msg.info.height,msg.info.width))
         # print to file
-        # np.savetxt(mapfile, self.occdata)
+        np.savetxt(mapfile, self.occdata)
 
 
     def scan_callback(self, msg):
@@ -129,7 +129,7 @@ class AutoNav(Node):
         # create numpy array
         self.laser_range = np.array(msg.ranges)
         # print to file
-        # np.savetxt(scanfile, self.laser_range)
+        np.savetxt(scanfile, self.laser_range)
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
 
@@ -192,7 +192,15 @@ class AutoNav(Node):
         # self.get_logger().info('In pick_direction')
         if self.laser_range.size != 0:
             # use nanargmax as there are nan's in laser_range added to replace 0's
-            lr2i = np.nanargmax(self.laser_range)
+            ## lr2i = np.nanargmax(self.laser_range) Original Code!!!
+            if np.take(self.laser_range, 90) > stop_distance:
+                lr2i = 90
+            elif np.take(self.laser_range, 270) > stop_distance:
+                lr2i = 270
+            elif np.take(self.laser_range, 180) > stop_distance:
+                lr2i = 180
+            else:
+                lr2i = np.nanargmax(self.laser_range)
             self.get_logger().info('Picked direction: %d %f m' % (lr2i, self.laser_range[lr2i]))
         else:
             lr2i = 0
