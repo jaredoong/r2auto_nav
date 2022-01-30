@@ -26,9 +26,9 @@ import time
 
 # constants
 rotatechange = 0.5
-speedchange = 0.15
+speedchange = 0.20 # speed increased to speed up simulation
 occ_bins = [-1, 0, 100, 101]
-stop_distance = 0.20
+stop_distance = 0.25
 front_angle = 30
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
@@ -36,6 +36,7 @@ mapfile = 'map.txt'
 LEFT = 89
 RIGHT = 269
 BACK = 179
+turn_tracker = []
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -223,14 +224,63 @@ class AutoNav(Node):
         self.publisher_.publish(twist)
 
     def u_turn_left(self):
-        self.get_logger().info('Making a u-turn')
+        self.get_logger().info('Making a left u-turn')
         # checks if able to turn left
         if np.take(self.laser_range, LEFT) > stop_distance:
             rotate_direction = LEFT
             self.get_logger().info('Left u-turn started')
 
             # rotate left
-            self.rotatebot(float(LEFT))
+            self.rotatebot(float(LEFT+1))
+
+            # start moving
+            self.get_logger().info('Moving forward')
+            twist = Twist()
+            twist.linear.x = speedchange
+            twist.angular.z = 0.0
+            # not sure if this is really necessary, but things seem to work more
+            # reliably with this
+            time.sleep(1)
+            self.publisher_.publish(twist)
+            time.sleep(1.5)
+            self.stopbot()
+
+            if np.take(self.laser_range, LEFT) > stop_distance:
+                rotate_direction = LEFT
+                self.get_logger().info('Completing left u-turn started')
+
+                # rotate left
+                self.rotatebot(float(LEFT+1))
+
+                # to keep track of current turn
+                if (len(turn_tracker)) != 0:
+                    self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
+                else:
+                    self.get_logger().info('No previous u-turn')
+
+                turn_tracker.append('left')
+                self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
+
+
+                # start moving
+                self.get_logger().info('Moving forward')
+                twist = Twist()
+                twist.linear.x = speedchange
+                twist.angular.z = 0.0
+                # not sure if this is really necessary, but things seem to work more
+                # reliably with this
+                time.sleep(1)
+                self.publisher_.publish(twist)
+            
+    def u_turn_right(self):
+        self.get_logger().info('Making a right u-turn')
+        # checks if able to turn right
+        if np.take(self.laser_range, RIGHT) > stop_distance:
+            rotate_direction = RIGHT
+            self.get_logger().info('Right u-turn started')
+
+            # rotate right
+            self.rotatebot(float(RIGHT+1))
 
             # start moving
             self.get_logger().info('Moving forward')
@@ -244,12 +294,21 @@ class AutoNav(Node):
             time.sleep(2)
             self.stopbot()
 
-            if np.take(self.laser_range, LEFT) > stop_distance:
-                rotate_direction = LEFT
-                self.get_logger().info('Completing left u-turn started')
+            if np.take(self.laser_range, RIGHT) > stop_distance:
+                rotate_direction = RIGHT
+                self.get_logger().info('Completing right u-turn started')
 
-                # rotate left
-                self.rotatebot(float(LEFT))
+                # rotate right
+                self.rotatebot(float(RIGHT+1))
+
+                # to keep track of current turn
+                if (len(turn_tracker)) != 0:
+                    self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
+                else:
+                    self.get_logger().info('No previous u-turn')
+
+                turn_tracker.append('right')
+                self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
 
                 # start moving
                 self.get_logger().info('Moving forward')
@@ -260,8 +319,6 @@ class AutoNav(Node):
                 # reliably with this
                 time.sleep(1)
                 self.publisher_.publish(twist)
-            
-            
 
     def stopbot(self):
         self.get_logger().info('In stopbot')
@@ -297,8 +354,22 @@ class AutoNav(Node):
                         # rotate to that direction
                         # start moving
                         # self.pick_direction()
-                        self.u_turn_left()
-                    
+                        
+                        ### testing alternating between left and right u turns
+                        # checks if wall is on the right side. If it is, start with left u-turn
+                        if (len(turn_tracker) == 0):
+                            if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
+                                self.u_turn_left()
+                            else:
+                                self.u_turn_right()
+                        else:
+                            if turn_tracker[-1] == 'left' and np.take(self.laser_range, RIGHT) > stop_distance:
+                                self.u_turn_right()
+                            elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
+                                self.u_turn_left()
+                            else:
+                                self.u_turn_right() # in the event that the left wall is too close
+
                 # allow the callback functions to run
                 rclpy.spin_once(self)
 
