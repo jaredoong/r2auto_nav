@@ -26,13 +26,16 @@ import time
 
 # constants
 rotatechange = 0.5
-speedchange = 0.10
+speedchange = 0.15
 occ_bins = [-1, 0, 100, 101]
 stop_distance = 0.20
 front_angle = 30
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
+LEFT = 89
+RIGHT = 269
+BACK = 179
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -105,15 +108,15 @@ class AutoNav(Node):
 
 
     def occ_callback(self, msg):
-        # self.get_logger().info('In occ_callback')
+        self.get_logger().info('In occ_callback')
         # create numpy array
         msgdata = np.array(msg.data)
         # compute histogram to identify percent of bins with -1
-        # occ_counts = np.histogram(msgdata,occ_bins)
+        occ_counts = np.histogram(msgdata,occ_bins)
         # calculate total number of bins
-        # total_bins = msg.info.width * msg.info.height
+        total_bins = msg.info.width * msg.info.height
         # log the info
-        # self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
+        self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
 
         # make msgdata go from 0 instead of -1, reshape into 2D
         oc2 = msgdata + 1
@@ -193,12 +196,12 @@ class AutoNav(Node):
         if self.laser_range.size != 0:
             # use nanargmax as there are nan's in laser_range added to replace 0's
             ## lr2i = np.nanargmax(self.laser_range) Original Code!!!
-            if np.take(self.laser_range, 90) > stop_distance:
-                lr2i = 90
-            elif np.take(self.laser_range, 270) > stop_distance:
-                lr2i = 270
-            elif np.take(self.laser_range, 180) > stop_distance:
-                lr2i = 180
+            if np.take(self.laser_range, LEFT) > stop_distance:
+                lr2i = LEFT
+            elif np.take(self.laser_range, RIGHT) > stop_distance:
+                lr2i = RIGHT
+            elif np.take(self.laser_range, BACK) > stop_distance:
+                lr2i = BACK
             else:
                 lr2i = np.nanargmax(self.laser_range)
             self.get_logger().info('Picked direction: %d %f m' % (lr2i, self.laser_range[lr2i]))
@@ -219,6 +222,46 @@ class AutoNav(Node):
         time.sleep(1)
         self.publisher_.publish(twist)
 
+    def u_turn_left(self):
+        self.get_logger().info('Making a u-turn')
+        # checks if able to turn left
+        if np.take(self.laser_range, LEFT) > stop_distance:
+            rotate_direction = LEFT
+            self.get_logger().info('Left u-turn started')
+
+            # rotate left
+            self.rotatebot(float(LEFT))
+
+            # start moving
+            self.get_logger().info('Moving forward')
+            twist = Twist()
+            twist.linear.x = speedchange
+            twist.angular.z = 0.0
+            # not sure if this is really necessary, but things seem to work more
+            # reliably with this
+            time.sleep(1)
+            self.publisher_.publish(twist)
+            time.sleep(2)
+            self.stopbot()
+
+            if np.take(self.laser_range, LEFT) > stop_distance:
+                rotate_direction = LEFT
+                self.get_logger().info('Completing left u-turn started')
+
+                # rotate left
+                self.rotatebot(float(LEFT))
+
+                # start moving
+                self.get_logger().info('Moving forward')
+                twist = Twist()
+                twist.linear.x = speedchange
+                twist.angular.z = 0.0
+                # not sure if this is really necessary, but things seem to work more
+                # reliably with this
+                time.sleep(1)
+                self.publisher_.publish(twist)
+            
+            
 
     def stopbot(self):
         self.get_logger().info('In stopbot')
@@ -253,7 +296,8 @@ class AutoNav(Node):
                         # find direction with the largest distance from the Lidar
                         # rotate to that direction
                         # start moving
-                        self.pick_direction()
+                        # self.pick_direction()
+                        self.u_turn_left()
                     
                 # allow the callback functions to run
                 rclpy.spin_once(self)
