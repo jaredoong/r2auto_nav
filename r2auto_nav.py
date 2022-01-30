@@ -320,6 +320,20 @@ class AutoNav(Node):
                 time.sleep(1)
                 self.publisher_.publish(twist)
 
+    def u_turn_back(self):
+        self.get_logger().info('Making a rotational u-turn')
+        self.rotatebot(float(180))
+        self.get_logger().info('Finsished turning')
+        # start moving
+        self.get_logger().info('Moving forward')
+        twist = Twist()
+        twist.linear.x = speedchange
+        twist.angular.z = 0.0
+        # not sure if this is really necessary, but things seem to work more
+        # reliably with this
+        time.sleep(1)
+        self.publisher_.publish(twist)
+
     def stopbot(self):
         self.get_logger().info('In stopbot')
         # publish to cmd_vel to move TurtleBot
