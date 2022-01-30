@@ -328,7 +328,8 @@ class AutoNav(Node):
 
     def u_turn_back(self):
         self.get_logger().info('Making a rotational u-turn')
-        self.rotatebot(float(180))
+        self.rotatebot(float(90))
+        self.rotatebot(float(90))
         self.get_logger().info('Finsished turning')
         # to ensure the next turn is correct
         if turn_tracker[-1] == 'left':
