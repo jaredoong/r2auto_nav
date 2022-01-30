@@ -36,6 +36,8 @@ mapfile = 'map.txt'
 LEFT = 89
 RIGHT = 269
 BACK = 179
+
+
 turn_tracker = []
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
@@ -242,7 +244,9 @@ class AutoNav(Node):
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            time.sleep(1.5)
+            time.sleep(1)
+            if np.take(self.laser_range, 0) > stop_distance:
+                time.sleep(1)
             self.stopbot()
 
             if np.take(self.laser_range, LEFT) > stop_distance:
@@ -291,7 +295,9 @@ class AutoNav(Node):
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            time.sleep(2)
+            time.sleep(1)
+            if np.take(self.laser_range, 0) > stop_distance:
+                time.sleep(1)
             self.stopbot()
 
             if np.take(self.laser_range, RIGHT) > stop_distance:
@@ -324,6 +330,11 @@ class AutoNav(Node):
         self.get_logger().info('Making a rotational u-turn')
         self.rotatebot(float(180))
         self.get_logger().info('Finsished turning')
+        # to ensure the next turn is correct
+        if turn_tracker[-1] == 'left':
+            turn_tracker.append('right')
+        else:
+            turn_tracker.append('left')
         # start moving
         self.get_logger().info('Moving forward')
         twist = Twist()
@@ -345,6 +356,7 @@ class AutoNav(Node):
 
 
     def mover(self):
+        num_turns = 0
         try:
             # initialize variable to write elapsed time to file
             # contourCheck = 1
@@ -382,7 +394,10 @@ class AutoNav(Node):
                             elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
                                 self.u_turn_left()
                             else:
-                                self.u_turn_right() # in the event that the left wall is too close
+                                self.u_turn_back()
+                        num_turns += 1
+                        self.get_logger().info('Current num of turns: %d' % num_turns)
+
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
