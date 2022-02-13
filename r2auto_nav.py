@@ -25,8 +25,9 @@ import cmath
 import time
 
 # constants
-rotatechange = 0.5
-speedchange = 0.20 # speed increased to speed up simulation
+rotatechange = 0.1
+speedchange = 0.2
+uturnforwardspeed = 0.1
 occ_bins = [-1, 0, 100, 101]
 stop_distance = 0.25
 front_angle = 30
@@ -155,7 +156,6 @@ class AutoNav(Node):
         c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
         # calculate desired yaw
         target_yaw = current_yaw + math.radians(rot_angle)
-        # convert to complex notation
         c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
         self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
         # divide the two complex numbers to get the change in direction
@@ -238,15 +238,19 @@ class AutoNav(Node):
             # start moving
             self.get_logger().info('Moving forward')
             twist = Twist()
-            twist.linear.x = speedchange
+            twist.linear.x = uturnforwardspeed
             twist.angular.z = 0.0
             # not sure if this is really necessary, but things seem to work more
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            time.sleep(1)
-            if np.take(self.laser_range, 0) > stop_distance:
-                time.sleep(1)
+            num_times = 5
+            while num_times:
+                if np.take(self.laser_range, 0) > stop_distance:
+                    time.sleep(1)
+                    num_times -= 1
+                else:
+                    break
             self.stopbot()
 
             if np.take(self.laser_range, LEFT) > stop_distance:
@@ -289,15 +293,19 @@ class AutoNav(Node):
             # start moving
             self.get_logger().info('Moving forward')
             twist = Twist()
-            twist.linear.x = speedchange
+            twist.linear.x = uturnforwardspeed
             twist.angular.z = 0.0
             # not sure if this is really necessary, but things seem to work more
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            time.sleep(1)
-            if np.take(self.laser_range, 0) > stop_distance:
-                time.sleep(1)
+            num_times = 5
+            while num_times:
+                if np.take(self.laser_range, 0) > stop_distance:
+                    time.sleep(1)
+                    num_times -= 1
+                else:
+                    break
             self.stopbot()
 
             if np.take(self.laser_range, RIGHT) > stop_distance:
