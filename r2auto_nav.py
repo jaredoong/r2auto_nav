@@ -85,6 +85,9 @@ class AutoNav(Node):
         self.roll = 0
         self.pitch = 0
         self.yaw = 0
+        self.x_pos = 0
+        self.y_pos = 0
+        self.z_pos = 0
         
         # create subscription to track occupancy
         self.occ_subscription = self.create_subscription(
@@ -108,11 +111,13 @@ class AutoNav(Node):
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
+        self.x_pos, self.y_pos, self.z_pos =  msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
+        self.get_logger().info('X-axis: %.2f, Y-axis: %.2f, Z-axis: %.2f' % (self.x_pos, self.y_pos, self.z_pos))
 
 
     def occ_callback(self, msg):
-        self.get_logger().info('In occ_callback')
+        #self.get_logger().info('In occ_callback')
         # create numpy array
         msgdata = np.array(msg.data)
         # compute histogram to identify percent of bins with -1
@@ -120,7 +125,7 @@ class AutoNav(Node):
         # calculate total number of bins
         total_bins = msg.info.width * msg.info.height
         # log the info
-        self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
+        #self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
 
         # make msgdata go from 0 instead of -1, reshape into 2D
         oc2 = msgdata + 1
@@ -139,6 +144,9 @@ class AutoNav(Node):
         np.savetxt(scanfile, self.laser_range)
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
+
+    def initial_position(self):
+        self.get_logger().info('Total horizontal distance travelled = %.2f' % self.x_pos)
 
 
     # function to rotate the TurtleBot
@@ -375,6 +383,7 @@ class AutoNav(Node):
             self.pick_direction()
 
             while rclpy.ok():
+                self.initial_position()
                 if self.laser_range.size != 0:
                     # check distances in front of TurtleBot and find values less
                     # than stop_distance
