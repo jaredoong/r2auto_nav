@@ -171,6 +171,15 @@ class AutoNav(Node):
         self.distance_travelled = 0
         return True
 
+    # function to bypass the obstacle to continue finding the NFC
+    def bypass_obstacle(self):
+        # initialise array to hold the turns for overcoming obstacle
+        curr_turns = []
+        # turn the turtlebot left before starting adopted Pledge algorithm
+        self.get_logger().info('Turtlebot turned left to start Pledge Algo')
+        self.rotatebot(LEFT)
+
+
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle):
         # self.get_logger().info('In rotatebot')
@@ -421,26 +430,31 @@ class AutoNav(Node):
                     if(len(lri[0])>0):
                         # stop moving
                         self.stopbot()
+                        self.get_logger().info('Obstacle encountered infront')
                         if self.edge_reached():
                             self.get_logger().info('Reached the edge of the maze')
-                        
-                        ### testing alternating between left and right u turns
-                        # checks if wall is on the right side. If it is, start with left u-turn
-                        if (len(turn_tracker) == 0):
-                            if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
-                                self.u_turn_left()
+                            # U-turn the turtlebot in the correct direction
+                            # checks if wall is on the right side for the very first turn. If it is, start with left u-turn
+                            if (len(turn_tracker) == 0):
+                                self.get_logger().info('Checking the first turn')
+                                if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
+                                    self.u_turn_left()
+                                else:
+                                    self.u_turn_right()
                             else:
-                                self.u_turn_right()
+                                self.get_logger().info('Checking subsequent turns')
+                                # for checking the subsequent turns
+                                if turn_tracker[-1] == 'left' and np.take(self.laser_range, RIGHT) > stop_distance:
+                                    self.u_turn_right()
+                                elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
+                                    self.u_turn_left()
+                                else:
+                                    self.u_turn_back()
+                            num_turns += 1
+                            self.get_logger().info('Current num of turns: %d' % num_turns)
                         else:
-                            if turn_tracker[-1] == 'left' and np.take(self.laser_range, RIGHT) > stop_distance:
-                                self.u_turn_right()
-                            elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
-                                self.u_turn_left()
-                            else:
-                                self.u_turn_back()
-                        num_turns += 1
-                        self.get_logger().info('Current num of turns: %d' % num_turns)
-
+                            self.bypass_obstacle()
+                            self.get_logger().info('Finished bypassing obstacle')
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
