@@ -25,11 +25,13 @@ import cmath
 import time
 
 # constants
-rotatechange = 0.1
-speedchange = 0.2
+rotatechange = 0.2
+speedchange = 0.3
 uturnforwardspeed = 0.1
 occ_bins = [-1, 0, 100, 101]
 stop_distance = 0.25
+turtlebot_length = 0.30
+full_width_length = 5.0 - 2*stop_distance - turtlebot_length
 front_angle = 30
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
@@ -112,11 +114,11 @@ class AutoNav(Node):
 
 
     def odom_callback(self, msg):
-        self.get_logger().info('In odom_callback')
+        # self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
         self.x_pos, self.y_pos, self.z_pos =  msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
-        self.get_logger().info('X-axis: %.2f, Y-axis: %.2f, Z-axis: %.2f' % (self.x_pos, self.y_pos, self.z_pos))
+        # self.get_logger().info('X-axis: %.2f, Y-axis: %.2f, Z-axis: %.2f' % (self.x_pos, self.y_pos, self.z_pos))
 
 
     def occ_callback(self, msg):
@@ -148,14 +150,26 @@ class AutoNav(Node):
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
 
+    # to set the initial position so that the distance travelled can be tracked
     def get_initial_x_pos(self):
         self.starting_x_pos = self.x_pos
         self.not_set = False
         self.get_logger().info('Starting horizontal distance position = %.2f' % self.starting_x_pos)
 
+    # for measuring the distance travelled 
     def travelled(self):
         self.distance_travelled = abs(self.x_pos - self.starting_x_pos)
         self.get_logger().info('Total horizontal distance travelled = %.2f' % self.distance_travelled)
+
+    # check if the robot is at the end of the maze
+    def edge_reached(self):
+        if self.distance_travelled < full_width_length:
+            return False
+        # reset the initial position
+        self.starting_x_pos = self.x_pos
+        # reset value of distance travelled
+        self.distance_travelled = 0
+        return True
 
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle):
@@ -398,6 +412,7 @@ class AutoNav(Node):
                     # than stop_distance
                     lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
                     # self.get_logger().info('Distances: %s' % str(lri))
+                    # check if the initial position has been set
                     if self.not_set:
                         self.get_logger().info('Setting initial distance')
                         self.get_initial_x_pos()
@@ -406,10 +421,8 @@ class AutoNav(Node):
                     if(len(lri[0])>0):
                         # stop moving
                         self.stopbot()
-                        # find direction with the largest distance from the Lidar
-                        # rotate to that direction
-                        # start moving
-                        # self.pick_direction()
+                        if self.edge_reached():
+                            self.get_logger().info('Reached the edge of the maze')
                         
                         ### testing alternating between left and right u turns
                         # checks if wall is on the right side. If it is, start with left u-turn
