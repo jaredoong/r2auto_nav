@@ -86,8 +86,11 @@ class AutoNav(Node):
         self.pitch = 0
         self.yaw = 0
         self.x_pos = 0
+        self.starting_x_pos = 0
         self.y_pos = 0
         self.z_pos = 0
+        self.distance_travelled = 0
+        self.not_set = True
         
         # create subscription to track occupancy
         self.occ_subscription = self.create_subscription(
@@ -109,7 +112,7 @@ class AutoNav(Node):
 
 
     def odom_callback(self, msg):
-        # self.get_logger().info('In odom_callback')
+        self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
         self.x_pos, self.y_pos, self.z_pos =  msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
@@ -145,9 +148,14 @@ class AutoNav(Node):
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
 
-    def initial_position(self):
-        self.get_logger().info('Total horizontal distance travelled = %.2f' % self.x_pos)
+    def get_initial_x_pos(self):
+        self.starting_x_pos = self.x_pos
+        self.not_set = False
+        self.get_logger().info('Starting horizontal distance position = %.2f' % self.starting_x_pos)
 
+    def travelled(self):
+        self.distance_travelled = abs(self.x_pos - self.starting_x_pos)
+        self.get_logger().info('Total horizontal distance travelled = %.2f' % self.distance_travelled)
 
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle):
@@ -381,14 +389,18 @@ class AutoNav(Node):
             # find direction with the largest distance from the Lidar,
             # rotate to that direction, and start moving
             self.pick_direction()
-
+            
             while rclpy.ok():
-                self.initial_position()
+                self.travelled()
+
                 if self.laser_range.size != 0:
                     # check distances in front of TurtleBot and find values less
                     # than stop_distance
                     lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
                     # self.get_logger().info('Distances: %s' % str(lri))
+                    if self.not_set:
+                        self.get_logger().info('Setting initial distance')
+                        self.get_initial_x_pos()
 
                     # if the list is not empty
                     if(len(lri[0])>0):
