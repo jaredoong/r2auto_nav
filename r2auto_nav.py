@@ -143,7 +143,7 @@ class AutoNav(Node):
 
 
     def scan_callback(self, msg):
-        # self.get_logger().info('In scan_callback')
+        self.get_logger().info('In scan_callback')
         # create numpy array
         self.laser_range = np.array(msg.ranges)
         # print to file
@@ -174,14 +174,15 @@ class AutoNav(Node):
 
     # function to bypass the obstacle to continue finding the NFC
     def bypass_obstacle(self):
+        self.odom_subscription 
         # variable used to hold the current y position of the turtlebot
         initial_y = self.y_pos
-        # setting the first avg right wall distance
-        prev_right_avg_distance = np.average(self.laser_range[264:274])
         self.get_logger().info('Initial y position is: %.2f' % initial_y)
         # turn the turtlebot left before starting adopted Pledge algorithm
         self.get_logger().info('Turtlebot turned left to start Pledge Algo')
         self.rotatebot(LEFT)
+        # setting the first avg right wall distance
+        prev_right_avg_distance = np.average(self.laser_range[264:274])
         # start moving forward after turn is made
         self.get_logger().info('Moving forward')
         twist = Twist()
@@ -196,26 +197,44 @@ class AutoNav(Node):
         # Loop to continuously check till turtlebot is done
         # Breaks out of loop automatically when done
         while (True):
+
+            # to update the laser_range values
+            rclpy.spin_once(self)
+
             # check if the turtlebot has reached the other side after moving off, with an allowance of 3 cm
             if (moved_off and (abs(initial_y - self.y_pos) <= 0.03)):
                 # turtlebot has successfully navigated around the obstacle, exiting function to resume normal navigation
                 self.get_logger().info('Turtlebot successfully navigated around the obstacle')
                 return None
-            # calculate the current avg distance from right wall, from 85 - 95 degree
-            curr_right_distances = self.laser_range[85:95]
+            # calculate the current avg distance from right wall, from 269 to 271 degree
+            self.get_logger().info('Updating current average right distance')
+            curr_right_distances = self.laser_range[269:271]
             curr_right_avg_distance = np.average(curr_right_distances)
             self.get_logger().info('Current average right distance is %.2f' % curr_right_avg_distance)
+
+            if (curr_right_avg_distance < prev_right_avg_distance):
+                    # reset the the average distance of the wall on the right
+                    prev_right_avg_distance = curr_right_avg_distance
+                    self.get_logger().info('New previous average right distance is %.2f' % prev_right_avg_distance)
+
             # check if the obstacle is still on the right
             # if distance suddenly increases significantly, obstacle no longer on the left
             # checked by if the avg distance between previous and current distance from right wall defer by more than 50%
-            distance_diff = abs(prev_right_avg_distance - curr_right_avg_distance)
-            if (distance_diff > (0.5 * prev_right_avg_distance)):
+            distance_diff = curr_right_avg_distance - prev_right_avg_distance
+            if (distance_diff > (2 * prev_right_avg_distance)):
+                time.sleep(1)
                 # wall no longer detected, rotate turtlebot right
                 self.get_logger().info('Wall on right no longer detected')
                 self.stopbot()
                 self.rotatebot(RIGHT)
                 # start moving forward after turn is made
                 self.get_logger().info('Moving forward')
+                # set moved_off to True only once
+                if (moved_off == False):
+                    moved_off = True
+                    self.get_logger().info('Moved_off set to True')
+
+                # for moving the turtlebot forward
                 twist = Twist()
                 twist.linear.x = obstaclespeed
                 twist.angular.z = 0.0
@@ -223,10 +242,7 @@ class AutoNav(Node):
                 # reliably with this
                 time.sleep(1)
                 self.publisher_.publish(twist)
-            # retrieve the average distance of the wall on the right
-            prev_right_avg_distance = curr_right_avg_distance
-            self.get_logger().info('Previous average right distance is %.2f' % prev_right_avg_distance)
-            moved_off = True
+
             # turtlebot moves forward till the wall is not detected on the right
 
 
@@ -337,8 +353,12 @@ class AutoNav(Node):
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            num_times = 5
+            num_times = 3
             while num_times:
+
+                # to update the laser_range values
+                rclpy.spin_once(self)
+
                 if np.take(self.laser_range, 0) > stop_distance:
                     time.sleep(1)
                     num_times -= 1
@@ -362,6 +382,8 @@ class AutoNav(Node):
                 turn_tracker.append('left')
                 self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
 
+                # reset the x pos
+                self.get_initial_x_pos()
 
                 # start moving
                 self.get_logger().info('Moving forward')
@@ -392,8 +414,12 @@ class AutoNav(Node):
             # reliably with this
             time.sleep(1)
             self.publisher_.publish(twist)
-            num_times = 5
+            num_times = 3
             while num_times:
+
+                # to update the laser_range values
+                rclpy.spin_once(self)
+
                 if np.take(self.laser_range, 0) > stop_distance:
                     time.sleep(1)
                     num_times -= 1
@@ -416,6 +442,9 @@ class AutoNav(Node):
 
                 turn_tracker.append('right')
                 self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
+
+                # reset the x pos
+                self.get_initial_x_pos()
 
                 # start moving
                 self.get_logger().info('Moving forward')
