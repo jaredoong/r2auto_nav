@@ -201,10 +201,11 @@ class AutoNav(Node):
             # to update the laser_range values
             rclpy.spin_once(self)
 
-            # check if the turtlebot has reached the other side after moving off, with an allowance of 3 cm
-            if (moved_off and (abs(initial_y - self.y_pos) <= 0.03)):
+            # check if the turtlebot has reached the other side after moving off, with an allowance of 1 cm
+            if (moved_off and (abs(initial_y - self.y_pos) <= 0.01)):
                 # turtlebot has successfully navigated around the obstacle, exiting function to resume normal navigation
                 self.get_logger().info('Turtlebot successfully navigated around the obstacle')
+                self.rotatebot(LEFT)
                 return None
             # calculate the current avg distance from right wall, from 269 to 271 degree
             self.get_logger().info('Updating current average right distance')
@@ -544,6 +545,17 @@ class AutoNav(Node):
                         else:
                             self.bypass_obstacle()
                             self.get_logger().info('Finished bypassing obstacle')
+
+                            # start moving forward after bypassing
+                            self.get_logger().info('Moving forward')
+                            twist = Twist()
+                            twist.linear.x = speedchange
+                            twist.angular.z = 0.0
+                            # not sure if this is really necessary, but things seem to work more
+                            # reliably with this
+                            time.sleep(1)
+                            self.publisher_.publish(twist)
+                            
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
