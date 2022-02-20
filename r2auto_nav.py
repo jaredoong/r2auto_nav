@@ -26,14 +26,15 @@ import time
 
 # constants
 rotatechange = 0.2
-speedchange = 0.2
-obstaclespeed = 0.15
+speedchange = 0.3
+obstaclespeed = 0.2
 uturnforwardspeed = 0.1
 occ_bins = [-1, 0, 100, 101]
 stop_distance = 0.25
 turtlebot_length = 0.30
 full_width_length = 5.0 - 2*stop_distance - turtlebot_length
-front_angle = 30
+angle_error = (2.0/180) * math.pi
+front_angle = 20
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
@@ -143,7 +144,7 @@ class AutoNav(Node):
 
 
     def scan_callback(self, msg):
-        self.get_logger().info('In scan_callback')
+        # self.get_logger().info('In scan_callback')
         # create numpy array
         self.laser_range = np.array(msg.ranges)
         # print to file
@@ -160,7 +161,7 @@ class AutoNav(Node):
     # for measuring the distance travelled 
     def travelled(self):
         self.distance_travelled = abs(self.x_pos - self.starting_x_pos)
-        self.get_logger().info('Total horizontal distance travelled = %.2f' % self.distance_travelled)
+        # self.get_logger().info('Total horizontal distance travelled = %.2f' % self.distance_travelled)
 
     # check if the robot is at the end of the maze
     def edge_reached(self):
@@ -231,14 +232,18 @@ class AutoNav(Node):
             if self.laser_range.size != 0:
                 # check distances in front of TurtleBot and find values less
                 # than stop_distance
-                lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
+                front_wall = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
 
-                if(len(lri[0])>0):
+                if(len(front_wall[0])>0):
                     # stop moving
                     self.stopbot()
                     self.get_logger().info('Obstacle encountered infront')
-                    if self.edge_reached():
-                        self.get_logger().info('Reached the edge of the maze')
+                    # to update the variable self.distance_travelled
+                    self.travelled()
+
+                    # exit bypass function if edge of maze is reached
+                    if (self.distance_travelled >= full_width_length):
+                        self.get_logger().info('Reached the edge of the maze while bypassing obs')
                         break
                     if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
                         self.rotatebot(LEFT)
@@ -255,10 +260,10 @@ class AutoNav(Node):
                     self.publisher_.publish(twist)
 
             # calculate the current avg distance from wall from front and side
-            self.get_logger().info('Updating current average wall distance')
+            # self.get_logger().info('Updating current average wall distance')
             curr_wall_side_distances = self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5]
             curr_wall_avg_side_distance = np.average(curr_wall_side_distances)
-            self.get_logger().info('Current average wall distance is %.2f' % curr_wall_avg_side_distance)
+            # self.get_logger().info('Current average wall distance is %.2f' % curr_wall_avg_side_distance)
 
             if (curr_wall_avg_side_distance < prev_wall_avg_side_distance):
                     # reset the the average distance of the wall on the wall
@@ -272,7 +277,7 @@ class AutoNav(Node):
             distance_diff = curr_wall_avg_side_distance - prev_wall_avg_side_distance
             if (distance_diff > (2 * prev_wall_avg_side_distance) and (prev_wall_avg_side_distance <= 0.5)):
                 # lag time given so that the turtlebot has sufficient space to turn
-                time.sleep(1)
+                time.sleep(0.5)
                 # wall no longer detected, rotate turtlebot
                 self.get_logger().info('Side wall no longer detected')
                 self.stopbot()
@@ -299,9 +304,6 @@ class AutoNav(Node):
                 self.publisher_.publish(twist)
 
 
-        
-
-
 
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle):
@@ -313,11 +315,33 @@ class AutoNav(Node):
         current_yaw = self.yaw
         # log the info
         self.get_logger().info('Current: %f' % math.degrees(current_yaw))
+
         # we are going to use complex numbers to avoid problems when the angles go from
         # 360 to 0, or from -180 to 180
         c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
         # calculate desired yaw
         target_yaw = current_yaw + math.radians(rot_angle)
+        self.get_logger().info('Actual target yaw is %f' % target_yaw)
+        # testing if changing target yaw can correct angle
+        while (target_yaw > 2*math.pi or target_yaw < -2*math.pi):
+            if target_yaw > 2*math.pi:
+                target_yaw -= 2*math.pi
+            else:
+                target_yaw += 2*math.pi
+
+        self.get_logger().info('Corrected 1 target yaw is %f' % target_yaw)
+        if ((target_yaw >= (math.pi - angle_error)) and (target_yaw <= (math.pi + angle_error))):
+            target_yaw = math.pi 
+        elif ((target_yaw >= (0.5*math.pi) - angle_error) and (target_yaw <= (0.5*math.pi) + angle_error)):
+            target_yaw = 0.5*math.pi
+        elif ((target_yaw <= -(0.5*math.pi) + angle_error) and (target_yaw >= -(0.5*math.pi) - angle_error)):
+            target_yaw = -0.5*math.pi
+        elif ((target_yaw >= (1.5*math.pi) - angle_error) and (target_yaw <= (1.5*math.pi) + angle_error)):
+            target_yaw = 1.5*math.pi
+        else:
+            target_yaw = 0.0
+        self.get_logger().info('Corrected 2 target yaw is %f' % target_yaw)
+
         c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
         self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
         # divide the two complex numbers to get the change in direction
@@ -349,11 +373,12 @@ class AutoNav(Node):
             c_dir_diff = np.sign(c_change.imag)
             # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
 
+        self.stopbot()
         self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
         # set the rotation speed to 0
-        twist.angular.z = 0.0
+        #twist.angular.z = 0.0
         # stop the rotation
-        self.publisher_.publish(twist)
+        #self.publisher_.publish(twist)
 
 
     def pick_direction(self):
