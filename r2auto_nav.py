@@ -199,7 +199,7 @@ class AutoNav(Node):
         self.get_logger().info('Turtlebot turned %s to start Pledge Algo' % bypass_direction)
         self.rotatebot(bypass_direction)
         # setting the first avg wall distance
-        prev_wall_avg_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
+        prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
         # start moving forward after turn is made
         self.get_logger().info('Moving forward')
         twist = Twist()
@@ -221,33 +221,60 @@ class AutoNav(Node):
             rclpy.spin_once(self)
 
             # check if the turtlebot has reached the other side after moving off, with an allowance of 1 mm
-            if (moved_off and (abs(initial_y - self.y_pos) <= 0.001)):
+            if (moved_off and (abs(initial_y - self.y_pos) <= 0.01)):
                 # turtlebot has successfully navigated around the obstacle, exiting function to resume normal navigation
                 self.get_logger().info('Turtlebot successfully navigated around the obstacle')
                 self.rotatebot(bypass_direction)
                 return None
 
-            # calculate the current avg distance from wall
-            self.get_logger().info('Updating current average wall distance')
-            curr_wall_distances = self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5]
-            curr_wall_avg_distance = np.average(curr_wall_distances)
-            self.get_logger().info('Current average wall distance is %.2f' % curr_wall_avg_distance)
+            # check if there is obstacle in front blocking the way
+            if self.laser_range.size != 0:
+                # check distances in front of TurtleBot and find values less
+                # than stop_distance
+                lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
 
-            if (curr_wall_avg_distance < prev_wall_avg_distance):
+                if(len(lri[0])>0):
+                    # stop moving
+                    self.stopbot()
+                    self.get_logger().info('Obstacle encountered infront')
+                    if self.edge_reached():
+                        self.get_logger().info('Reached the edge of the maze')
+                        break
+                    if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
+                        self.rotatebot(LEFT)
+                    else:
+                        self.rotatebot(RIGHT)
+
+                    # for moving the turtlebot forward
+                    twist = Twist()
+                    twist.linear.x = obstaclespeed
+                    twist.angular.z = 0.0
+                    # not sure if this is really necessary, but things seem to work more
+                    # reliably with this
+                    time.sleep(1)
+                    self.publisher_.publish(twist)
+
+            # calculate the current avg distance from wall from front and side
+            self.get_logger().info('Updating current average wall distance')
+            curr_wall_side_distances = self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5]
+            curr_wall_avg_side_distance = np.average(curr_wall_side_distances)
+            self.get_logger().info('Current average wall distance is %.2f' % curr_wall_avg_side_distance)
+
+            if (curr_wall_avg_side_distance < prev_wall_avg_side_distance):
                     # reset the the average distance of the wall on the wall
-                    prev_wall_avg_distance = curr_wall_avg_distance
-                    self.get_logger().info('New previous average wall distance is %.2f' % prev_wall_avg_distance)
+                    prev_wall_avg_side_distance = curr_wall_avg_side_distance
+                    self.get_logger().info('New previous average wall distance is %.2f' % prev_wall_avg_side_distance)
 
             # check if the obstacle is still on the side
             # if distance suddenly increases significantly, obstacle no longer on the side
             # checked by if the avg distance between previous and current distance from wall defer by more than 50%
             # and the prev_wall_avg_distance needs to be less than 0.5m away to ensure the wall has been detected before
-            distance_diff = curr_wall_avg_distance - prev_wall_avg_distance
-            if (distance_diff > (2 * prev_wall_avg_distance) and (prev_wall_avg_distance <= 0.5)):
+            distance_diff = curr_wall_avg_side_distance - prev_wall_avg_side_distance
+            if (distance_diff > (2 * prev_wall_avg_side_distance) and (prev_wall_avg_side_distance <= 0.5)):
                 # lag time given so that the turtlebot has sufficient space to turn
                 time.sleep(1)
                 # wall no longer detected, rotate turtlebot
-                self.get_logger().info('Wall no longer detected')
+                self.get_logger().info('Side wall no longer detected')
                 self.stopbot()
                 self.rotatebot(bypass_opp_dir)
                 # start moving forward after turn is made
@@ -257,10 +284,10 @@ class AutoNav(Node):
                     moved_off = True
                     self.get_logger().info('Moved_off set to True')
 
-                # reset the avg wall distance
-                self.get_logger().info('Resetting prev average wall distance')
-                prev_wall_avg_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
-                self.get_logger().info('New prev average wall distance is %.2f' % prev_wall_avg_distance)
+                # reset the avg side wall distance
+                self.get_logger().info('Resetting prev average side wall distance')
+                prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
+                self.get_logger().info('New prev average wall distance is %.2f' % prev_wall_avg_side_distance)
 
                 # for moving the turtlebot forward
                 twist = Twist()
