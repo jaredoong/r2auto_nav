@@ -220,8 +220,10 @@ class AutoNav(Node):
             # check if the obstacle is still on the right
             # if distance suddenly increases significantly, obstacle no longer on the left
             # checked by if the avg distance between previous and current distance from right wall defer by more than 50%
+            # and the prev_right_avg_distance needs to be less than 0.5m away to ensure the wall has been detected before
             distance_diff = curr_right_avg_distance - prev_right_avg_distance
-            if (distance_diff > (2 * prev_right_avg_distance)):
+            if (distance_diff > (2 * prev_right_avg_distance) and (prev_right_avg_distance <= 0.5)):
+                # lag time given so that the turtlebot has sufficient space to turn
                 time.sleep(1)
                 # wall no longer detected, rotate turtlebot right
                 self.get_logger().info('Wall on right no longer detected')
@@ -233,6 +235,11 @@ class AutoNav(Node):
                 if (moved_off == False):
                     moved_off = True
                     self.get_logger().info('Moved_off set to True')
+
+                # reset the avg right distance
+                self.get_logger().info('Resetting prev average right distance')
+                prev_right_avg_distance = np.average(self.laser_range[269:271])
+                self.get_logger().info('New prev average right distance is %.2f' % prev_right_avg_distance)
 
                 # for moving the turtlebot forward
                 twist = Twist()
