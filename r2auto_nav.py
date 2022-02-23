@@ -38,9 +38,9 @@ front_angle = 20
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-LEFT = 89
-RIGHT = 269
-BACK = 179
+LEFT = 90
+RIGHT = 270
+BACK = 180
 
 
 turn_tracker = []
@@ -93,6 +93,7 @@ class AutoNav(Node):
         self.starting_x_pos = 0
         self.y_pos = 0
         self.z_pos = 0
+        self.curr_dir = 0
         self.distance_travelled = 0
         self.not_set = True
         
@@ -183,6 +184,21 @@ class AutoNav(Node):
         time.sleep(1)
         self.publisher_.publish(twist)
 
+    def travel_distance(self, direction, distance):
+        if direction == LEFT or direction == RIGHT:
+            curr_pos = self.y_pos
+            while (abs(curr_pos - self.y_pos) < distance):
+                rclpy.spin_once(self)
+                if np.average(self.laser_range[0]) <= stop_distance:
+                    self.get_logger().info('Obs in front, unable to allocate more travel distance')
+        else:
+            curr_pos = self.x_pos
+            while (abs(curr_pos - self.x_pos) < distance):
+                rclpy.spin_once(self)
+                if np.average(self.laser_range[0]) <= stop_distance:
+                    self.get_logger().info('Obs in front, unable to allocate more travel distance')
+        self.get_logger().info('Extra travel distance met')
+
     # function to bypass the obstacle to continue finding the NFC
     def bypass_obstacle(self):
         # to prevent situation in which turtlebot stuck in starting point of maze which is a dead end
@@ -223,7 +239,7 @@ class AutoNav(Node):
             # to update the laser_range values
             rclpy.spin_once(self)
 
-            # check if the turtlebot has reached the other side after moving off, with an allowance of 1 mm
+            # check if the turtlebot has reached the other side after moving off, with an allowance of 1 cm
             if (moved_off and (abs(initial_y - self.y_pos) <= 0.01)):
                 # turtlebot has successfully navigated around the obstacle, exiting function to resume normal navigation
                 self.get_logger().info('Turtlebot successfully navigated around the obstacle')
@@ -271,10 +287,13 @@ class AutoNav(Node):
             # and the prev_wall_avg_distance needs to be less than 0.5m away to ensure the wall has been detected before
             distance_diff = curr_wall_avg_side_distance - prev_wall_avg_side_distance
             if (distance_diff > (2 * prev_wall_avg_side_distance) and (prev_wall_avg_side_distance <= 0.5)):
-                # lag time given so that the turtlebot has sufficient space to turn
-                time.sleep(0.5)
-                # wall no longer detected, rotate turtlebot
                 self.get_logger().info('Side wall no longer detected')
+                # extra distance so that the turtlebot has sufficient space to turn
+                if (abs(self.y_pos - initial_y) < 0.20):
+                    self.travel_distance(self.curr_dir, abs(self.y_pos - initial_y))
+                else:
+                    self.travel_distance(self.curr_dir, 0.20)
+                # wall no longer detected, stop and rotate turtlebot
                 self.stopbot()
                 self.rotatebot(bypass_opp_dir)
                 # set moved_off to True only once
@@ -295,6 +314,10 @@ class AutoNav(Node):
         # self.get_logger().info('In rotatebot')
         # create Twist object
         twist = Twist()
+
+        # set the correct direction
+        self.curr_dir = (self.curr_dir + rot_angle) % 360
+        self.get_logger().info('Current dir is %i' % self.curr_dir)
         
         # get current yaw angle
         current_yaw = self.yaw
@@ -391,27 +414,18 @@ class AutoNav(Node):
             self.get_logger().info('Left u-turn started')
 
             # rotate left
-            self.rotatebot(float(LEFT+1))
+            self.rotatebot(float(LEFT))
 
             # start moving
             self.move_forward()
-            num_times = 3
-            while num_times:
-                # to update the laser_range values
-                rclpy.spin_once(self)
-
-                if np.take(self.laser_range, 0) > stop_distance:
-                    time.sleep(1)
-                    num_times -= 1
-                else:
-                    break
+            self.travel_distance(self.curr_dir, 0.30)
             self.stopbot()
 
             if np.take(self.laser_range, LEFT) > stop_distance:
                 self.get_logger().info('Completing left u-turn started')
 
                 # rotate left
-                self.rotatebot(float(LEFT+1))
+                self.rotatebot(float(LEFT))
 
                 # to keep track of current turn
                 if (len(turn_tracker)) != 0:
@@ -435,29 +449,18 @@ class AutoNav(Node):
             self.get_logger().info('Right u-turn started')
 
             # rotate right
-            self.rotatebot(float(RIGHT+1))
+            self.rotatebot(float(RIGHT))
 
             # start moving
             self.move_forward()
-            num_times = 3
-            while num_times:
-
-                # to update the laser_range values
-                rclpy.spin_once(self)
-
-                if np.take(self.laser_range, 0) > stop_distance:
-                    time.sleep(1)
-                    num_times -= 1
-                else:
-                    break
+            self.travel_distance(self.curr_dir, 0.30)
             self.stopbot()
 
             if np.take(self.laser_range, RIGHT) > stop_distance:
-                rotate_direction = RIGHT
                 self.get_logger().info('Completing right u-turn started')
 
                 # rotate right
-                self.rotatebot(float(RIGHT+1))
+                self.rotatebot(float(RIGHT))
 
                 # to keep track of current turn
                 if (len(turn_tracker)) != 0:
@@ -476,8 +479,8 @@ class AutoNav(Node):
 
     def u_turn_back(self):
         self.get_logger().info('Making a rotational u-turn')
-        self.rotatebot(float(90))
-        self.rotatebot(float(90))
+        self.rotatebot(float(LEFT))
+        self.rotatebot(float(LEFT))
         self.get_logger().info('Finsished turning')
         # to ensure the next turn is correct
         if turn_tracker[-1] == 'left':
