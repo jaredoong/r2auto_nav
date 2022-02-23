@@ -30,8 +30,8 @@ speedchange = 0.3
 obstaclespeed = 0.2
 uturnforwardspeed = 0.1
 occ_bins = [-1, 0, 100, 101]
-stop_distance = 0.25
-turtlebot_length = 0.30
+stop_distance = 0.30
+turtlebot_length = 0.40
 full_width_length = 5.0 - 2*stop_distance - turtlebot_length
 angle_error = (2.0/180) * math.pi
 front_angle = 20
@@ -142,7 +142,6 @@ class AutoNav(Node):
         # print to file
         np.savetxt(mapfile, self.occdata)
 
-
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
         # create numpy array
@@ -173,6 +172,17 @@ class AutoNav(Node):
         self.distance_travelled = 0
         return True
 
+    def move_forward(self):
+        # start moving forward
+        self.get_logger().info('Moving forward')
+        twist = Twist()
+        twist.linear.x = obstaclespeed
+        twist.angular.z = 0.0
+        # not sure if this is really necessary, but things seem to work more
+        # reliably with this
+        time.sleep(1)
+        self.publisher_.publish(twist)
+
     # function to bypass the obstacle to continue finding the NFC
     def bypass_obstacle(self):
         # to prevent situation in which turtlebot stuck in starting point of maze which is a dead end
@@ -202,15 +212,7 @@ class AutoNav(Node):
         # setting the first avg wall distance
         prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
         # start moving forward after turn is made
-        self.get_logger().info('Moving forward')
-        twist = Twist()
-        twist.linear.x = obstaclespeed
-        twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
-        time.sleep(1)
-        self.publisher_.publish(twist)
-
+        self.move_forward()
         # variable to prevent turtlebot from exiting function even before it starts moving
         moved_off = False
 
@@ -250,14 +252,7 @@ class AutoNav(Node):
                     else:
                         self.rotatebot(RIGHT)
 
-                    # for moving the turtlebot forward
-                    twist = Twist()
-                    twist.linear.x = obstaclespeed
-                    twist.angular.z = 0.0
-                    # not sure if this is really necessary, but things seem to work more
-                    # reliably with this
-                    time.sleep(1)
-                    self.publisher_.publish(twist)
+                    self.move_forward()
 
             # calculate the current avg distance from wall from front and side
             # self.get_logger().info('Updating current average wall distance')
@@ -282,8 +277,6 @@ class AutoNav(Node):
                 self.get_logger().info('Side wall no longer detected')
                 self.stopbot()
                 self.rotatebot(bypass_opp_dir)
-                # start moving forward after turn is made
-                self.get_logger().info('Moving forward')
                 # set moved_off to True only once
                 if (moved_off == False):
                     moved_off = True
@@ -293,15 +286,7 @@ class AutoNav(Node):
                 self.get_logger().info('Resetting prev average side wall distance')
                 prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
                 self.get_logger().info('New prev average wall distance is %.2f' % prev_wall_avg_side_distance)
-
-                # for moving the turtlebot forward
-                twist = Twist()
-                twist.linear.x = obstaclespeed
-                twist.angular.z = 0.0
-                # not sure if this is really necessary, but things seem to work more
-                # reliably with this
-                time.sleep(1)
-                self.publisher_.publish(twist)
+                self.move_forward()
 
 
 
@@ -372,14 +357,8 @@ class AutoNav(Node):
             # get the sign to see if we can stop
             c_dir_diff = np.sign(c_change.imag)
             # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-
         self.stopbot()
         self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
-        # set the rotation speed to 0
-        #twist.angular.z = 0.0
-        # stop the rotation
-        #self.publisher_.publish(twist)
-
 
     def pick_direction(self):
         # self.get_logger().info('In pick_direction')
@@ -403,14 +382,7 @@ class AutoNav(Node):
         self.rotatebot(float(lr2i))
 
         # start moving
-        self.get_logger().info('Start moving')
-        twist = Twist()
-        twist.linear.x = speedchange
-        twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
-        time.sleep(1)
-        self.publisher_.publish(twist)
+        self.move_forward()
 
     def u_turn_left(self):
         self.get_logger().info('Making a left u-turn')
@@ -422,17 +394,9 @@ class AutoNav(Node):
             self.rotatebot(float(LEFT+1))
 
             # start moving
-            self.get_logger().info('Moving forward')
-            twist = Twist()
-            twist.linear.x = uturnforwardspeed
-            twist.angular.z = 0.0
-            # not sure if this is really necessary, but things seem to work more
-            # reliably with this
-            time.sleep(1)
-            self.publisher_.publish(twist)
+            self.move_forward()
             num_times = 3
             while num_times:
-
                 # to update the laser_range values
                 rclpy.spin_once(self)
 
@@ -444,7 +408,6 @@ class AutoNav(Node):
             self.stopbot()
 
             if np.take(self.laser_range, LEFT) > stop_distance:
-                rotate_direction = LEFT
                 self.get_logger().info('Completing left u-turn started')
 
                 # rotate left
@@ -463,34 +426,19 @@ class AutoNav(Node):
                 self.get_initial_x_pos()
 
                 # start moving
-                self.get_logger().info('Moving forward')
-                twist = Twist()
-                twist.linear.x = speedchange
-                twist.angular.z = 0.0
-                # not sure if this is really necessary, but things seem to work more
-                # reliably with this
-                time.sleep(1)
-                self.publisher_.publish(twist)
+                self.move_forward()
             
     def u_turn_right(self):
         self.get_logger().info('Making a right u-turn')
         # checks if able to turn right
         if np.take(self.laser_range, RIGHT) > stop_distance:
-            rotate_direction = RIGHT
             self.get_logger().info('Right u-turn started')
 
             # rotate right
             self.rotatebot(float(RIGHT+1))
 
             # start moving
-            self.get_logger().info('Moving forward')
-            twist = Twist()
-            twist.linear.x = uturnforwardspeed
-            twist.angular.z = 0.0
-            # not sure if this is really necessary, but things seem to work more
-            # reliably with this
-            time.sleep(1)
-            self.publisher_.publish(twist)
+            self.move_forward()
             num_times = 3
             while num_times:
 
@@ -524,14 +472,7 @@ class AutoNav(Node):
                 self.get_initial_x_pos()
 
                 # start moving
-                self.get_logger().info('Moving forward')
-                twist = Twist()
-                twist.linear.x = speedchange
-                twist.angular.z = 0.0
-                # not sure if this is really necessary, but things seem to work more
-                # reliably with this
-                time.sleep(1)
-                self.publisher_.publish(twist)
+                self.move_forward()
 
     def u_turn_back(self):
         self.get_logger().info('Making a rotational u-turn')
@@ -544,14 +485,7 @@ class AutoNav(Node):
         else:
             turn_tracker.append('left')
         # start moving
-        self.get_logger().info('Moving forward')
-        twist = Twist()
-        twist.linear.x = speedchange
-        twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
-        time.sleep(1)
-        self.publisher_.publish(twist)
+        self.move_forward()
 
     def stopbot(self):
         self.get_logger().info('In stopbot')
@@ -616,14 +550,7 @@ class AutoNav(Node):
                             self.get_logger().info('Finished bypassing obstacle')
 
                             # start moving forward after bypassing
-                            self.get_logger().info('Moving forward')
-                            twist = Twist()
-                            twist.linear.x = speedchange
-                            twist.angular.z = 0.0
-                            # not sure if this is really necessary, but things seem to work more
-                            # reliably with this
-                            time.sleep(1)
-                            self.publisher_.publish(twist)
+                            self.move_forward()
                             
 
                 # allow the callback functions to run
