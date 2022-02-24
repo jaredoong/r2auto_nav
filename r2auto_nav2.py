@@ -203,13 +203,17 @@ class AutoNav(Node):
             while (abs(curr_pos - self.y_pos) < distance):
                 rclpy.spin_once(self)
                 if np.average(self.laser_range[0]) <= stop_distance:
+                    self.stopbot()
                     self.get_logger().info('Obs in front, unable to allocate more travel distance')
+                    break
         else:
             curr_pos = self.x_pos
             while (abs(curr_pos - self.x_pos) < distance):
                 rclpy.spin_once(self)
                 if np.average(self.laser_range[0]) <= stop_distance:
+                    self.stopbot()
                     self.get_logger().info('Obs in front, unable to allocate more travel distance')
+                    break
         self.get_logger().info('Extra travel distance met')
 
     # function to bypass the obstacle to continue finding the NFC
@@ -643,8 +647,12 @@ class AutoNav(Node):
             # to update the total distance travelled
             self.travelled()
         
-        self.get_logger().info('Stopping move_to_edge func')
         self.stopbot()
+        if (np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT)):
+            self.rotatebot(LEFT)
+        else:
+            self.rotatebot(RIGHT)
+        self.get_logger().info('Stopping move_to_edge func')
 
     def find_thermal(self):
         self.get_logger().info('Starting thermal func')
@@ -658,8 +666,20 @@ class AutoNav(Node):
                 self.move_to_edge()
             self.get_logger().info('Moved to edge successfully')
 
+            # update laser range based on new position
+            rclpy.spin_once(self)
+            if (np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT)):
+                wall_location = RIGHT
+                rot_dir = LEFT
+                self.get_logger().info('Wall on right side')
+            else:
+                wall_location = LEFT
+                rot_dir = RIGHT
+                self.get_logger().info('Wall on left side')
+            
+
             while rclpy.ok():
-                self.get_logger().info('in loop')
+                self.get_logger().info('in thermal loop')
                 self.travelled()
 
                 if self.laser_range.size != 0:
@@ -667,11 +687,14 @@ class AutoNav(Node):
                     # than stop_distance
                     lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
                     # self.get_logger().info('Distances: %s' % str(lri))
-                    # check if the initial position has been set
-                    if self.not_set:
-                        self.get_logger().info('Setting initial distance')
-                        self.get_initial_x_pos()
 
+                    if (len(lri[0]) == 0):
+                        self.get_logger().info("Moving forward to new area")
+                        self.move_forward()
+                        self.travel_distance(self.curr_dir, 0.5)
+                        self.rotatebot(rot_dir)
+                        # Insert code for checking whether thermal cam detect thermal object here
+                        self.rotatebot(wall_location)
                     # if the list is not empty
                     if(len(lri[0])>0):
                         # stop moving
@@ -721,6 +744,7 @@ def main(args=None):
     auto_nav.find_nfc()
     #auto_nav.load_balls()
     auto_nav.find_thermal()
+    #auto_nav.adjust_bot()
     #auto_nav.launcher()
 
     # Destroy the node explicitly
