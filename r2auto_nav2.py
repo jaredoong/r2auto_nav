@@ -211,7 +211,7 @@ class AutoNav(Node):
                 bypass_direction = RIGHT
                 bypass_opp_dir = LEFT 
         # check prev u-turn direction
-        if turn_tracker[-1] == 'left':
+        elif turn_tracker[-1] == 'left':
             bypass_direction = RIGHT
             bypass_opp_dir = LEFT
         else:
