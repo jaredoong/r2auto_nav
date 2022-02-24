@@ -224,7 +224,7 @@ class AutoNav(Node):
                 bypass_direction = RIGHT
                 bypass_opp_dir = LEFT 
         # check prev u-turn direction
-        if turn_tracker[-1] == 'left':
+        elif turn_tracker[-1] == 'left':
             bypass_direction = RIGHT
             bypass_opp_dir = LEFT
         else:
@@ -594,18 +594,36 @@ class AutoNav(Node):
 
     # to move the turtlebot to the edge of the maze before starting algo to find thermal object
     def move_to_edge(self):
-        if turn_tracker[-1] == 'left':
+        # update the total distance travelled so far
+        self.travelled()
+        # to determine where the turtlebot should move to
+        if len(turn_tracker) == 0:
+            wanted_direction = FRONT
+        elif turn_tracker[-1] == 'left':
             wanted_direction = FRONT
         else:
             wanted_direction = BACK
+        
+        # if turtlebot further from the wall it came from, go to opposite wall
+        if self.travelled_dist > 0.5*full_width_length:
+            # swap wanted_direction to the opposite direction
+            if wanted_direction == FRONT:
+                wanted_direction = BACK
+            else:
+                wanted_direction = FRONT
 
         #rotate turtlebot till it is in the correct direction
+        ## could be improved for non random direction
+        self.get_logger().info("Wanted direction: %i" % wanted_direction)
         while (self.curr_dir != wanted_direction):
             self.rotatebot(LEFT)
 
-        self.travelled()
-        # allowance of 1cm given
-        while (self.travelled_dist > 0.01):
+        # start moving towards wall
+        self.move_forward()
+
+        # allowance of 3cm given
+        while (self.travelled_dist > 0.03 or self.travelled_dist < full_width_length - 0.03):
+            self.get_logger().info('Current travel distance is %.4f' % self.travelled_dist)
             rclpy.spin_once(self)
 
             if self.laser_range.size != 0:
@@ -617,13 +635,16 @@ class AutoNav(Node):
                 self.stopbot()
                 self.get_logger().info('Obstacle encountered infront')
                 self.travelled()
-                if (self.travelled_dist <= 0.01):
-                    self.get_logger().info('Initial pos reached')
+                if (self.travelled_dist <= 0.03 or self.travelled_dist >= full_width_length - 0.03):
+                    self.get_logger().info('Edge of maze reached')
                     break
                 self.bypass_obstacle()
                 self.move_forward()
             # to update the total distance travelled
             self.travelled()
+        
+        self.get_logger().info('Stopping move_to_edge func')
+        self.stopbot()
 
     def find_thermal(self):
         self.get_logger().info('Starting thermal func')
