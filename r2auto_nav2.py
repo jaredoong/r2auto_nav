@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import random
+from signal import pthread_kill
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
@@ -36,6 +37,7 @@ turtlebot_length = 0.40
 full_width_length = 5.0 - 2*stop_distance - turtlebot_length
 angle_error = (2.0/180) * math.pi
 front_angle = 20
+side_angle = 10
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
@@ -101,6 +103,7 @@ class AutoNav(Node):
         self.yaw = 0
         self.x_pos = 0
         self.starting_x_pos = 0
+        self.starting_y_pos = 0
         self.y_pos = 0
         self.z_pos = 0
         self.curr_dir = 0
@@ -166,10 +169,12 @@ class AutoNav(Node):
         self.laser_range[self.laser_range==0] = np.nan
 
     # to set the initial position so that the distance travelled can be tracked
-    def get_initial_x_pos(self):
+    def get_initial_pos(self):
         self.starting_x_pos = self.x_pos
+        self.starting_y_pos = self.y_pos
         self.not_set = False
-        self.get_logger().info('Starting horizontal distance position = %.2f' % self.starting_x_pos)
+        self.get_logger().info('Starting x position = %.2f' % self.starting_x_pos)
+        self.get_logger().info('Starting y position = %.2f' % self.starting_y_pos)
 
     # for measuring the distance travelled 
     def travelled(self):
@@ -185,6 +190,14 @@ class AutoNav(Node):
         # reset value of distance travelled
         self.travelled_dist = 0.0
         return True
+
+    # to check if the obstacle can be bypassed in the current direction
+    def cannot_bypass(self):
+        if (abs(self.y_pos - self.starting_y_pos) > full_width_length):
+            self.get_logger().info("Current Y travelled is %f" % abs(self.y_pos - self.starting_y_pos))
+            self.get_logger().info('Unable to bypass, trying the other direction')
+            return True
+        return False
 
     def move_forward(self):
         # start moving forward
@@ -218,6 +231,10 @@ class AutoNav(Node):
 
     # function to bypass the obstacle to continue finding the NFC
     def bypass_obstacle(self):
+        # variable to prevent turtlebot from exiting function even before it starts moving
+        moved_off = False
+        extra_distance = 0.2
+
         # to prevent situation in which turtlebot stuck in starting point of maze which is a dead end
         # if no u-turn done yet
         if len(turn_tracker) == 0:
@@ -243,12 +260,31 @@ class AutoNav(Node):
         self.get_logger().info('Turtlebot turned %s to start Pledge Algo' % bypass_direction)
         self.rotatebot(bypass_direction)
         # setting the first avg wall distance
-        prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
+        prev_wall_avg_side_distance = np.mean(np.ma.masked_invalid(self.laser_range[bypass_opp_dir-side_angle:bypass_opp_dir+side_angle]))
+        self.get_logger().info("First wall distance is %f" % prev_wall_avg_side_distance)
+        
+        # check if bot might be at edge of wall
+        self.get_logger().info("Checking if almost over obs")
+        if (bypass_opp_dir == LEFT):
+            back_angle_dis = np.mean(np.ma.masked_invalid(self.laser_range[bypass_opp_dir:bypass_opp_dir+front_angle]))
+            front_angle_dis = np.mean(np.ma.masked_invalid(self.laser_range[bypass_opp_dir-front_angle:bypass_opp_dir]))
+        else:
+            front_angle_dis = np.mean(np.ma.masked_invalid(self.laser_range[bypass_opp_dir:bypass_opp_dir+front_angle]))
+            back_angle_dis = np.mean(np.ma.masked_invalid(self.laser_range[bypass_opp_dir-front_angle:bypass_opp_dir]))
+        self.get_logger().info("Back angle distance is %f" % back_angle_dis)
+        self.get_logger().info("Front angle distance is %f" % front_angle_dis)
+        # check if avg distance of back angle is smaller than avg distance of front angle, if yes, bot almost past obs
+        # 0.01 added to prevent insignificant differences from triggering code
+        if (back_angle_dis +  0.01 < front_angle_dis):
+            self.get_logger().info("Almost over obs")
+            self.move_forward()
+            self.travel_distance(self.curr_dir, extra_distance)
+            self.stopbot()
+            self.rotatebot(bypass_opp_dir)
+            self.get_logger().info("In pos for main loop")
         # start moving forward after turn is made
         self.move_forward()
-        # variable to prevent turtlebot from exiting function even before it starts moving
-        moved_off = False
-
+        
         # Loop to continuously check till turtlebot is done
         # Breaks out of loop automatically when done
         while (True):
@@ -276,6 +312,14 @@ class AutoNav(Node):
                     # to update the variable self.self.travelled_dist
                     self.travelled()
 
+                    if self.cannot_bypass():
+                        # swap the direction of bypass and turn to the back
+                        bypass_direction, bypass_opp_dir = bypass_opp_dir, bypass_direction
+                        self.get_logger().info('Direction swapped')
+                        self.rotatebot(BACK)
+                        self.move_forward()
+                        continue
+
                     # exit bypass function if edge of maze is reached
                     if (self.travelled_dist >= full_width_length):
                         self.get_logger().info('Reached the edge of the maze while bypassing obs')
@@ -289,8 +333,10 @@ class AutoNav(Node):
 
             # calculate the current avg distance from wall from front and side
             # self.get_logger().info('Updating current average wall distance')
-            curr_wall_side_distances = self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5]
-            curr_wall_avg_side_distance = np.average(curr_wall_side_distances)
+            curr_wall_side_distances = self.laser_range[bypass_opp_dir-side_angle:bypass_opp_dir+side_angle]
+            # change all inf to max range of LIDAR
+            curr_wall_side_distances[np.isposinf(curr_wall_side_distances)] = 3.5
+            curr_wall_avg_side_distance = np.mean(curr_wall_side_distances)
             # self.get_logger().info('Current average wall distance is %.2f' % curr_wall_avg_side_distance)
 
             if (curr_wall_avg_side_distance < prev_wall_avg_side_distance):
@@ -303,13 +349,13 @@ class AutoNav(Node):
             # checked by if the avg distance between previous and current distance from wall defer by more than 50%
             # and the prev_wall_avg_distance needs to be less than 0.5m away to ensure the wall has been detected before
             distance_diff = curr_wall_avg_side_distance - prev_wall_avg_side_distance
-            if (distance_diff > (2 * prev_wall_avg_side_distance) and (prev_wall_avg_side_distance <= 0.5)):
+            if (distance_diff > (2 * prev_wall_avg_side_distance) and (prev_wall_avg_side_distance <= 2*stop_distance)):
                 self.get_logger().info('Side wall no longer detected')
                 # extra distance so that the turtlebot has sufficient space to turn
-                if (abs(self.y_pos - initial_y) < 0.20):
+                if (abs(self.y_pos - initial_y) < extra_distance):
                     self.travel_distance(self.curr_dir, abs(self.y_pos - initial_y))
                 else:
-                    self.travel_distance(self.curr_dir, 0.20)
+                    self.travel_distance(self.curr_dir, extra_distance)
                 # wall no longer detected, stop and rotate turtlebot
                 self.stopbot()
                 self.rotatebot(bypass_opp_dir)
@@ -320,7 +366,7 @@ class AutoNav(Node):
 
                 # reset the avg side wall distance
                 self.get_logger().info('Resetting prev average side wall distance')
-                prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-5:bypass_opp_dir+5])
+                prev_wall_avg_side_distance = np.average(self.laser_range[bypass_opp_dir-side_angle:bypass_opp_dir+side_angle])
                 self.get_logger().info('New prev average wall distance is %.2f' % prev_wall_avg_side_distance)
                 self.move_forward()
 
@@ -456,7 +502,7 @@ class AutoNav(Node):
                 self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
 
                 # reset the x pos
-                self.get_initial_x_pos()
+                self.starting_x_pos = self.x_pos
 
                 # start moving
                 self.move_forward()
@@ -493,7 +539,7 @@ class AutoNav(Node):
                 self.get_logger().info('Previous u-turn: %s' % turn_tracker[-1])
 
                 # reset the x pos
-                self.get_initial_x_pos()
+                self.starting_x_pos = self.x_pos
 
                 # start moving
                 self.move_forward()
@@ -523,9 +569,9 @@ class AutoNav(Node):
     def find_nfc(self):
 
         # to simulate nfc found
-        set_time = time.time()
-        random.seed(time.time())
-        rand_num = random.randint(10, 20)
+        #set_time = time.time()
+        #random.seed(time.time())
+        #rand_num = random.randint(10, 20)
         try:
             # initialize variable to write elapsed time to file
             # contourCheck = 1
@@ -536,11 +582,11 @@ class AutoNav(Node):
             
             while rclpy.ok():
                 # for simulating nfc found
-                curr_time = time.time()
-                if (curr_time - set_time) >= rand_num:
-                    self.get_logger().info('Simulating NFC found')
-                    self.get_logger().info('Exiting NFC func')
-                    break
+                #curr_time = time.time()
+                #if (curr_time - set_time) >= rand_num:
+                #    self.get_logger().info('Simulating NFC found')
+                #    self.get_logger().info('Exiting NFC func')
+                #    break
 
                 self.travelled()
 
@@ -552,7 +598,7 @@ class AutoNav(Node):
                     # check if the initial position has been set
                     if self.not_set:
                         self.get_logger().info('Setting initial distance')
-                        self.get_initial_x_pos()
+                        self.get_initial_pos()
 
                     # if the list is not empty
                     if(len(lri[0])>0):
@@ -677,54 +723,43 @@ class AutoNav(Node):
                 rot_dir = RIGHT
                 self.get_logger().info('Wall on left side')
             
+            min_left = left_side = np.average(self.laser_range[LEFT-5:LEFT+5])
 
             while rclpy.ok():
                 self.get_logger().info('in thermal loop')
                 self.travelled()
+                left_side = np.average(self.laser_range[LEFT-5:LEFT+5])
+                front = self.laser_range[0]
+                if (left_side < min_left):
+                    min_left = left_side
+                self.get_logger().info('Min distance of left wall is %f' % min_left)
+                self.get_logger().info('Current distance of left wall is %f' % left_side)
 
                 if self.laser_range.size != 0:
                     # check distances in front of TurtleBot and find values less
                     # than stop_distance
-                    lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
+                    if (left_side > 1.5*min_left):
+                        self.travel_distance(self.curr_dir, 0.1)
+                        self.rotatebot(LEFT)
+                        self.move_forward()
+                        self.get_logger().info("Moving to real edge of maze") 
                     # self.get_logger().info('Distances: %s' % str(lri))
 
-                    if (len(lri[0]) == 0):
+                    # continue moving forward when there is nothing blocking in front
+                    if (front > stop_distance):
+                        self.get_logger().info("Distance in front is %f" % front)
                         self.get_logger().info("Moving forward to new area")
                         self.move_forward()
                         self.travel_distance(self.curr_dir, 0.5)
                         self.rotatebot(rot_dir)
                         # Insert code for checking whether thermal cam detect thermal object here
                         self.rotatebot(wall_location)
-                    # if the list is not empty
-                    if(len(lri[0])>0):
+                    # if there is a wall in front
+                    else:
                         # stop moving
                         self.stopbot()
                         self.get_logger().info('Obstacle encountered infront')
-                        if self.edge_reached():
-                            self.get_logger().info('Reached the edge of the maze')
-                            # U-turn the turtlebot in the correct direction
-                            # checks if wall is on the right side for the very first turn. If it is, start with left u-turn
-                            if (len(turn_tracker) == 0):
-                                self.get_logger().info('Checking the first turn')
-                                if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
-                                    self.u_turn_left()
-                                else:
-                                    self.u_turn_right()
-                            else:
-                                self.get_logger().info('Checking subsequent turns')
-                                # for checking the subsequent turns
-                                if turn_tracker[-1] == 'left' and np.take(self.laser_range, RIGHT) > stop_distance:
-                                    self.u_turn_right()
-                                elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
-                                    self.u_turn_left()
-                                else:
-                                    self.u_turn_back()
-                        else:
-                            self.bypass_obstacle()
-                            self.get_logger().info('Finished bypassing obstacle')
-
-                            # start moving forward after bypassing
-                            self.move_forward()
+                        self.rotatebot(RIGHT)
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
