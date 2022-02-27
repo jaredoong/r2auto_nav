@@ -275,7 +275,7 @@ class AutoNav(Node):
         self.get_logger().info("Front angle distance is %f" % front_angle_dis)
         # check if avg distance of back angle is smaller than avg distance of front angle, if yes, bot almost past obs
         # 0.01 added to prevent insignificant differences from triggering code
-        if (back_angle_dis +  0.01 < front_angle_dis):
+        if (back_angle_dis*1.5 < front_angle_dis):
             self.get_logger().info("Almost over obs")
             self.move_forward()
             self.travel_distance(self.curr_dir, extra_distance)
