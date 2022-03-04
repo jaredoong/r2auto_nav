@@ -19,7 +19,6 @@
 # If unable to find thermal yet, navigate around wall of maze, turning everytime distance of opp wall suddenly increases it will rotate 180
 # whenever it reaches the corners of the maze, will alos rotate back to direction it came from before turning back to start moving off. (thermal)
 
-import random
 from signal import pthread_kill
 import rclpy
 from rclpy.node import Node
@@ -33,9 +32,11 @@ import math
 import cmath
 import time
 
+from custom_msgs.msg import Nfc
+
 # constants
-rotatechange = 0.2
-speedchange = 0.3
+rotatechange = 0.1 # reduced speed while testing
+speedchange = 0.1 # reduced speed while testing
 obstaclespeed = 0.2
 uturnforwardspeed = 0.1
 occ_bins = [-1, 0, 100, 101]
@@ -135,12 +136,19 @@ class AutoNav(Node):
         self.scan_subscription  # prevent unused variable warning
         self.laser_range = np.array([])
 
+        self.nfc_subscription = self.create_subscription(
+            Nfc,
+            'nfc_found',
+            self.nfc_callback,
+            10)
+        self.nfcfound = False
+
     #def nfc_callback(self, msg):
     #    self.get_logger().info('NFC detected: "%s"' % msg.nfc_found)
     #    self.nfc_found = msg.nfc_found
 
     def odom_callback(self, msg):
-        # self.get_logger().info('In odom_callback')
+        self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
         self.x_pos, self.y_pos, self.z_pos =  msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
@@ -175,6 +183,10 @@ class AutoNav(Node):
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
 
+    def nfc_callback(self, msg):
+        self.nfcfound = msg.nfc_found
+        self.get_logger().info('NFC detected: "%s"' % msg.nfc_found)
+        
     # to set the initial position so that the distance travelled can be tracked
     def get_initial_pos(self):
         self.starting_x_pos = self.x_pos
@@ -186,7 +198,7 @@ class AutoNav(Node):
     # for measuring the distance travelled 
     def travelled(self):
         self.travelled_dist = abs(self.x_pos - self.starting_x_pos)
-        # self.get_logger().info('Total horizontal distance travelled = %.2f' % self.travelled_dist)
+        self.get_logger().info('Total horizontal distance travelled = %.2f' % self.travelled_dist)
 
     # check if the robot is at the end of the maze
     def edge_reached(self):
@@ -802,13 +814,81 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
+    def complete_maze(self):
+        try:
+            # initialize variable to write elapsed time to file
+            # contourCheck = 1
+            # allow starting variables to be initialised properly
+            rclpy.spin_once(self)
+            # Move forward once it starts
+            self.move_forward()
+            
+            while rclpy.ok():
+
+                self.travelled()
+                if self.nfcfound == True:
+                    self.stopbot()
+                    self.get_logger().info("NFC found")
+
+                if self.laser_range.size != 0:
+                    # check distances in front of TurtleBot and find values less
+                    # than stop_distance
+                    lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
+                    # self.get_logger().info('Distances: %s' % str(lri))
+                    # check if the initial position has been set
+                    if self.not_set:
+                        self.get_logger().info('Setting initial distance')
+                        self.get_initial_pos()
+
+                    # if the list is not empty
+                    if(len(lri[0])>0):
+                        # stop moving
+                        self.stopbot()
+                        self.get_logger().info('Obstacle encountered infront')
+                        if self.edge_reached():
+                            self.get_logger().info('Reached the edge of the maze')
+                            # U-turn the turtlebot in the correct direction
+                            # checks if wall is on the right side for the very first turn. If it is, start with left u-turn
+                            if (len(turn_tracker) == 0):
+                                self.get_logger().info('Checking the first turn')
+                                self.get_logger().info("Left dis: %f, Right dis: %f" % (np.take(self.laser_range, LEFT),np.take(self.laser_range, RIGHT)))
+                                if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
+                                    self.u_turn_left()
+                                else:
+                                    self.u_turn_right()
+                            else:
+                                self.get_logger().info('Checking subsequent turns')
+                                # for checking the subsequent turns
+                                if turn_tracker[-1] == 'left' and np.take(self.laser_range, RIGHT) > stop_distance:
+                                    self.u_turn_right()
+                                elif turn_tracker[-1] == 'right' and np.take(self.laser_range, LEFT) > stop_distance:
+                                    self.u_turn_left()
+                                else:
+                                    self.u_turn_back()
+                        else:
+                            self.bypass_obstacle()
+                            self.get_logger().info('Finished bypassing obstacle')
+
+                            # start moving forward after bypassing
+                            self.move_forward()
+
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+
+        except Exception as e:
+            print(e)
+        
+        # Ctrl-c detected
+        finally:
+            # stop moving
+            self.stopbot()
+
 def main(args=None):
     rclpy.init(args=args)
 
     auto_nav = AutoNav()
-    auto_nav.find_nfc()
+    auto_nav.complete_maze()
     #auto_nav.load_balls()
-    auto_nav.find_thermal()
     #auto_nav.adjust_bot()
     #auto_nav.launcher()
 
