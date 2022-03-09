@@ -38,21 +38,19 @@ import time
 from custom_msgs.msg import Nfc
 
 # constants
-rotatechange = 0.1 # reduced speed while testing
-speedchange = 0.1 # reduced speed while testing
-obstaclespeed = 0.2
-uturnforwardspeed = 0.1
+rotatechange = 0.2
+slowrotate = 0.70
+fastrotate = 0.90
+speedchange = 0.2
 occ_bins = [-1, 0, 100, 101]
-stop_distance = 0.3
-turtlebot_length = 0.3
-full_width_length = 5.0 - 2*stop_distance - turtlebot_length
-angle_error = (2.0/180) * math.pi
+stop_distance = 0.23
 front_angle = 20 # min angle to prevent any collision
-side_angle = 10
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 FRONT = 0
+FRONT_LEFT = 45
+FRONT_RIGHT = 315
 LEFT = 90
 RIGHT = 270
 BACK = 180
@@ -174,7 +172,7 @@ class AutoNav(Node):
         # start moving forward
         self.get_logger().info('Moving forward')
         twist = Twist()
-        twist.linear.x = obstaclespeed
+        twist.linear.x = speedchange
         twist.angular.z = 0.0
         # not sure if this is really necessary, but things seem to work more
         # reliably with this
@@ -269,63 +267,110 @@ class AutoNav(Node):
         # time.sleep(1)
         self.publisher_.publish(twist)
 
-    def complete_maze(self):
+    # algorithm to follow left wall
+    def follow_wall(self):
+        # create Twist object
+        twist = Twist()
 
-        # to keep track of whether bot has travelled one full round
-        num_turns = 0
+        # get distance from wall for each side
+        front = np.nan_to_num(self.laser_range[FRONT], nan=3.5 ,posinf=3.5)
+        frontright = np.nan_to_num(self.laser_range[FRONT_RIGHT], nan=3.5 ,posinf=3.5)
+        frontleft = np.nan_to_num(self.laser_range[FRONT_LEFT], nan=3.5 ,posinf=3.5)
+
+        self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
+
+        d = stop_distance / math.cos(math.radians(45))
+
+        # main logic for the wall follower algo, keeps track of left wall and follow it
+        # wall detected if < d, else not detected
+
+        # if no wall detected at all, turn left slightly to find wall
+        if front > d and frontleft > d and frontright > d:
+            self.get_logger().info("No obs at all, slow turning left to find the wall")
+            twist.linear.x = speedchange*0.5
+            twist.angular.z = slowrotate
+
+        # wall detected in front only, turn right to keep wall on left
+        elif front < d and frontleft > d and frontright > d:
+            self.get_logger().info("Wall in front only, fast turning right")
+            twist.linear.x = 0.0
+            twist.angular.z = -fastrotate
+
+        # wall detected on front left only
+        elif front > d and frontleft < d and frontright > d:
+            # check if bot is too close to the wall, if yes move away slightly
+            # considered too close if left side is d-3cm
+            if frontleft < (d-0.05):
+                self.get_logger().info("Too close to left wall, slow turning right slightly")
+                twist.linear.x = speedchange*0.5
+                twist.angular.z = -slowrotate
+            # no changes needed, continue moving forward
+            else:
+                self.get_logger().info("Correct distance, following wall")
+                twist.linear.x = speedchange
+                twist.angular.z = 0.0
+        
+        # wall detected on front right only, turn left to find wall
+        elif front > d and frontleft > d and frontright < d:
+            self.get_logger().info("Wall at front right only, slow turning left to find wall")
+            twist.linear.x = speedchange*0.5
+            twist.angular.z = slowrotate
+        
+        # wall detected on front left and front, turn right to avoid collision
+        elif front < d and frontleft <d and frontright > d:
+            self.get_logger().info("Wall at front and front left, fast turning right to avoid collision")
+            twist.linear.x = 0.0
+            twist.angular.z = -fastrotate
+
+        # wall detected on front and front right, turn left to avoid collision
+        elif front < d and frontleft > d and frontright <d:
+            self.get_logger().info("Wall at front and front right, fast turning left to avoid collision")
+            twist.linear.x = 0.0
+            twist.angular.z = fastrotate
+
+        # wall detected on all 3 sides, turn right to avoid collision and keep wall on left side
+        elif front < d and frontleft < d and frontright < d:
+            self.get_logger().info("Wall in all direction, fast left to avoid collision")
+            twist.linear.x = 0.0
+            twist.angular.z = fastrotate
+
+        # wall detected on front left and front right, turn left to find wall
+        elif front > d and frontleft < d and frontright < d:
+            self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
+            twist.linear.x = speedchange*0.5
+            twist.angular.z = slowrotate
+
+        # in event of unaccounted for cases, which should not happen
+        else:
+            self.get_logger().info("Unaccounted case, fix code")
+        
+        # update velocity of turtlebot
+        self.publisher_.publish(twist)
+
+
+    def mover(self):
 
         try:
             # initialize variable to write elapsed time to file
             # contourCheck = 1
-            # allow starting variables to be initialised properly
-            rclpy.spin_once(self)
-            self.get_logger().info('Setting initial distance')
-            self.get_initial_pos()
-            # Move forward once it starts
+
+            #  ensure data being received from LIDAR before starting
+            while (len(self.laser_range) == 0):
+                self.get_logger().info("Fetching LIDAR data")
+                rclpy.spin_once(self)
+
+            # Move forward once ready
             self.move_forward()
-            # for keeping track of size of maze
-            size_set = False
             
             while rclpy.ok():
-
-                self.travelled()
                 if self.nfcfound == True:
                     self.stopbot()
                     self.get_logger().info("NFC found")
 
-                # travel along mid line once one round completed
-                if num_turns == 4:
-                    self.get_logger().info("One round completed, travelling to midline")
-                    self.travel_midline()
-                    
-                    # break out of complete_maze function once entire maze is mapped
-                    break
-
-                if self.laser_range.size != 0:
-                    # check distances in front of TurtleBot and find values less
-                    # than stop_distance
-                    lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
-                    # self.get_logger().info('Distances: %s' % str(lri))
-
-                    # if the list is not empty
-                    if(len(lri[0])>0):
-                        # stop moving
-                        self.stopbot()
-                        if size_set == False:
-                            # setting the dimensions of the maze
-                            self.size = self.x_travelled_dist
-                            size_set = True
-                        self.get_logger().info('Reached the edge of the maze')
-                        # checks for side with larger clearance and turns there
-                        self.get_logger().info('Checking the side clearance')
-                        self.get_logger().info("Left dis: %f, Right dis: %f" % (np.take(self.laser_range, LEFT),np.take(self.laser_range, RIGHT)))
-                        if np.take(self.laser_range, LEFT) > np.take(self.laser_range, RIGHT):
-                            self.rotatebot(LEFT)
-                        else:
-                            self.rotatebot(RIGHT)
-                        self.get_initial_pos()
-                        num_turns += 1
-                        self.move_forward()
+                # add in if else part for thermal and button once ready
+                else:
+                    # self.get_logger().info("Entering wall following algo")
+                    self.follow_wall()
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
@@ -388,9 +433,9 @@ def main(args=None):
     rclpy.init(args=args)
 
     auto_nav = AutoNav()
-    auto_nav.complete_maze()
-    auto_nav.load_balls()
-    auto_nav.find_objects()
+    auto_nav.mover()
+    #auto_nav.load_balls()
+    #auto_nav.find_objects()
     #auto_nav.adjust_bot()
     #auto_nav.launcher()
 
