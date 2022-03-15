@@ -41,7 +41,7 @@ front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 40
+threshold_temp = 35 # calibrated to temp of thermal object
 FRONT = 0
 FRONT_LEFT = 45
 FRONT_RIGHT = 315
@@ -94,6 +94,7 @@ class AutoNav(Node):
         self.roll = 0
         self.pitch = 0
         self.yaw = 0
+        self.centered = False
         
         # create subscription to track occupancy
         self.occ_subscription = self.create_subscription(
@@ -186,8 +187,9 @@ class AutoNav(Node):
         self.thermalimg = msg.thermal
         # data set into 8x8 array
         self.thermalimg = np.reshape(self.thermalimg,(8,8))
-        # left and right values flipped 
+        # flip both vertically and horizontally 
         self.thermalimg = np.fliplr(self.thermalimg)
+        self.thermalimg = np.flipud(self.thermalimg)
         print(self.thermalimg)
 
     # for moving straight forward in current direction
@@ -528,7 +530,7 @@ class AutoNav(Node):
             fig_dims = (12,9) # figure size
             fig,ax = plt.subplots(figsize=fig_dims) # start figure
             pix_res = (8,8) # pixel resolution
-            im1 = ax.imshow(self.thermalimg,vmin=15,vmax=50,origin='lower') # plot image, with temperature bounds
+            im1 = ax.imshow(self.thermalimg,vmin=15,vmax=35) # plot image, with temperature bounds
             cbar = fig.colorbar(im1,fraction=0.0475,pad=0.03) # colorbar
             cbar.set_label('Temperature [C]',labelpad=10) # temp. label
             fig.canvas.draw() # draw figure
@@ -543,7 +545,66 @@ class AutoNav(Node):
                 fig.canvas.blit(ax.bbox) # blitting - for speeding up run
                 fig.canvas.flush_events() # for real-time plot
 
-                # adjusting of position
+                # transpose image so that can check by columns
+                thermal_data = np.transpose(self.thermalimg)
+
+                cols_found = []
+                row_num = 0
+                for row in thermal_data:
+                    self.get_logger().info("Checking row %i" % row_num)
+                    col_num = 0
+                    for temp in row:
+                        self.get_logger().info("Checking col %i, Temp is %.2f" % (col_num, temp))
+                        if temp >= threshold_temp:
+                            self.thermalfound = True
+                            cols_found.append(row_num)
+                            break
+                        col_num += 1
+                    row_num += 1
+                # for checking with columns the object detected in    
+                print(("Columns found: {}").format(cols_found))
+
+                # if thermal object is found, stop the bot
+                if self.thermalfound == True:
+                    self.stopbot()
+                
+                # adjusting of position of bot relative to thermal object
+                if len(cols_found) != 0 and self.centered == False:
+                    # use the middle column to align
+                    reference_col = cols_found[len(cols_found) / 2]
+                    if reference_col  < 3:
+                        # turn left to centralise the object
+                        self.get_logger().info("Turning left to centralise bot")
+                        twist = Twist()
+                        twist.linear.x = 0.0
+                        twist.angular.z = 0.5*slowrotate
+                        time.sleep(1)
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    elif reference_col > 4:
+                        # turn right to centralise the object
+                        self.get_logger().info("Turning right to centralise bot")
+                        twist = Twist()
+                        twist.linear.x = 0.0
+                        twist.angular.z = -0.5*slowrotate
+                        time.sleep(1)
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    else:
+                        self.centered = True          
+
+                if self.centered:
+                    self.get_logger().info("Centralised")
+                    # if too far away, move closer to object
+                    if (len(cols_found) < 4):
+                        self.move_forward()
+                    else:
+                        self.stopbot()
+                        self.get_logger.info("Correct distance away from object")
+                        # once correct distance and centered, can move to launcher part
+                        break
+
+                
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
