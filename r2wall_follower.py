@@ -41,7 +41,7 @@ front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 35 # calibrated to temp of thermal object
+threshold_temp = 30 # calibrated to temp of thermal object
 FRONT = 0
 FRONT_LEFT = 45
 FRONT_RIGHT = 315
@@ -121,14 +121,16 @@ class AutoNav(Node):
             self.nfc_callback,
             10)
         self.nfcfound = False
+        self.nfc_subscription # prevent unused variable warning
 
         # create subscription to check if button has been pressed
-        self.nfc_subscription = self.create_subscription(
+        self.button_subscription = self.create_subscription(
             Button,
             'button_pressed',
             self.button_callback,
             10)
         self.buttonpressed = False
+        self.button_subscription # prevent unused variable warning
 
         # create subscription to check if thermal object found
         self.thermal_subscription = self.create_subscription(
@@ -138,6 +140,7 @@ class AutoNav(Node):
             10)
         self.thermalfound = False
         self.thermalimg = np.zeros((8,8))
+        self.thermal_subscription # prevent unused variable warning
 
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
@@ -502,7 +505,7 @@ class AutoNav(Node):
                 if self.nfcfound == True and self.thermalfound == True:
                     self.get_logger().info("Both NFC and object found")
                     break
-                elif self.nfcfound == True and self.thermal_found == False:
+                elif self.nfcfound == True and self.thermalfound == False:
                     self.get_logger().info("NFC found, finding thermal now")
                     # self.find_thermal()
                     # add move forward temporarily so that bot can move
@@ -539,22 +542,26 @@ class AutoNav(Node):
 
             while rclpy.ok():
                 # Plotting in real time
+                self.get_logger().info('Redrawing image')
                 fig.canvas.restore_region(ax_bgnd) # restore background (speeds up run)
                 im1.set_data(np.reshape(self.thermalimg,pix_res)) # update plot with new temps
                 ax.draw_artist(im1) # draw image again
                 fig.canvas.blit(ax.bbox) # blitting - for speeding up run
                 fig.canvas.flush_events() # for real-time plot
+                self.get_logger().info('Done redrawing image')
 
                 # transpose image so that can check by columns
+                self.get_logger().info("Getting new data")
                 thermal_data = np.transpose(self.thermalimg)
+                self.get_logger().info("Done getting new data")
 
                 cols_found = []
                 row_num = 0
                 for row in thermal_data:
-                    self.get_logger().info("Checking row %i" % row_num)
+                    self.get_logger().info("Checking col %i" % row_num)
                     col_num = 0
                     for temp in row:
-                        self.get_logger().info("Checking col %i, Temp is %.2f" % (col_num, temp))
+                        self.get_logger().info("Checking row %i, Temp is %.2f" % (col_num, temp))
                         if temp >= threshold_temp:
                             self.thermalfound = True
                             cols_found.append(row_num)
@@ -571,7 +578,7 @@ class AutoNav(Node):
                 # adjusting of position of bot relative to thermal object
                 if len(cols_found) != 0 and self.centered == False:
                     # use the middle column to align
-                    reference_col = cols_found[len(cols_found) / 2]
+                    reference_col = cols_found[int(len(cols_found) / 2)]
                     if reference_col  < 3:
                         # turn left to centralise the object
                         self.get_logger().info("Turning left to centralise bot")
@@ -591,7 +598,10 @@ class AutoNav(Node):
                         self.publisher_.publish(twist)
                         time.sleep(1)
                     else:
-                        self.centered = True          
+                        self.centered = True
+                        self.stopbot()
+                
+
 
                 if self.centered:
                     self.get_logger().info("Centralised")
@@ -628,6 +638,7 @@ def main(args=None):
 
     #auto_nav.mover()
     #auto_nav.load_balls()
+    #auto_nav.find_thermal()
     #auto_nav.find_objects()
     #auto_nav.adjust_bot()
     #auto_nav.launcher()
