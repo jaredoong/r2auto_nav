@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 # load AMG8833 module
 from .amg8833 import amg8833_i2c
 
-from custom_msgs.msg import Nfc, Button, Thermal
+from custom_msgs.msg import Nfc, Button, Thermal, Launcher
 
 # constants
 rotatechange = 0.2
@@ -80,6 +80,10 @@ class AutoNav(Node):
         
         # create publisher for moving TurtleBot
         self.publisher_ = self.create_publisher(Twist,'cmd_vel',10)
+        # self.get_logger().info('Created publisher')
+
+        # create publisher for starting launcher
+        self.publisher_launcher = self.create_publisher(Launcher,'start_launcher',10)
         # self.get_logger().info('Created publisher')
 
         # create subscription to track orientation
@@ -139,6 +143,7 @@ class AutoNav(Node):
             self.thermal_callback,
             10)
         self.thermalfound = False
+        self.thermal_updated = False
         self.thermalimg = np.zeros((8,8))
         self.thermal_subscription # prevent unused variable warning
 
@@ -184,7 +189,7 @@ class AutoNav(Node):
 
     def button_callback(self, msg):
         self.buttonpressed = msg.button_pressed
-        self.get_logger().info('NFC detected: "%s"' % msg.button_pressed)
+        self.get_logger().info('Button pressed: "%s"' % msg.button_pressed)
 
     def thermal_callback(self, msg):
         self.thermalimg = msg.thermal
@@ -193,7 +198,9 @@ class AutoNav(Node):
         # flip both vertically and horizontally 
         self.thermalimg = np.fliplr(self.thermalimg)
         self.thermalimg = np.flipud(self.thermalimg)
+        print("New data received")
         print(self.thermalimg)
+        self.thermal_updated = True
 
     # for moving straight forward in current direction
     def move_forward(self):
@@ -268,7 +275,7 @@ class AutoNav(Node):
         twist = Twist()
         twist.linear.x = 0.0
         twist.angular.z = 0.0
-        # time.sleep(1)
+        #time.sleep(1)
         self.publisher_.publish(twist)
 
     # algorithm to follow left wall
@@ -541,6 +548,13 @@ class AutoNav(Node):
             fig.show() # show figure
 
             while rclpy.ok():
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+                
+                # waits for thermal data to be updated
+                if self.thermal_updated == False:
+                    continue
+
                 # Plotting in real time
                 self.get_logger().info('Redrawing image')
                 fig.canvas.restore_region(ax_bgnd) # restore background (speeds up run)
@@ -548,20 +562,20 @@ class AutoNav(Node):
                 ax.draw_artist(im1) # draw image again
                 fig.canvas.blit(ax.bbox) # blitting - for speeding up run
                 fig.canvas.flush_events() # for real-time plot
-                self.get_logger().info('Done redrawing image')
+                #self.get_logger().info('Done redrawing image')
 
                 # transpose image so that can check by columns
-                self.get_logger().info("Getting new data")
+                #self.get_logger().info("Getting new data")
                 thermal_data = np.transpose(self.thermalimg)
-                self.get_logger().info("Done getting new data")
+                #self.get_logger().info("Done getting new data")
 
                 cols_found = []
                 row_num = 0
                 for row in thermal_data:
-                    self.get_logger().info("Checking col %i" % row_num)
+                    #self.get_logger().info("Checking col %i" % row_num)
                     col_num = 0
                     for temp in row:
-                        self.get_logger().info("Checking row %i, Temp is %.2f" % (col_num, temp))
+                        #self.get_logger().info("Checking row %i, Temp is %.2f" % (col_num, temp))
                         if temp >= threshold_temp:
                             self.thermalfound = True
                             cols_found.append(row_num)
@@ -581,43 +595,43 @@ class AutoNav(Node):
                     reference_col = cols_found[int(len(cols_found) / 2)]
                     if reference_col  < 3:
                         # turn left to centralise the object
-                        self.get_logger().info("Turning left to centralise bot")
                         twist = Twist()
                         twist.linear.x = 0.0
-                        twist.angular.z = 0.5*slowrotate
+                        twist.angular.z = 0.2*slowrotate
                         time.sleep(1)
+                        self.get_logger().info("Turning left to centralise bot")
                         self.publisher_.publish(twist)
                         time.sleep(1)
                     elif reference_col > 4:
                         # turn right to centralise the object
-                        self.get_logger().info("Turning right to centralise bot")
                         twist = Twist()
                         twist.linear.x = 0.0
-                        twist.angular.z = -0.5*slowrotate
+                        twist.angular.z = -0.2*slowrotate
                         time.sleep(1)
+                        self.get_logger().info("Turning right to centralise bot")
                         self.publisher_.publish(twist)
                         time.sleep(1)
                     else:
                         self.centered = True
                         self.stopbot()
-                
-
+                    self.thermal_updated = False # reset the variable once used
 
                 if self.centered:
                     self.get_logger().info("Centralised")
                     # if too far away, move closer to object
-                    if (len(cols_found) < 4):
-                        self.move_forward()
+                    if (len(cols_found) < 3):
+                        twist = Twist()
+                        twist.linear.x = 0.5 * speedchange
+                        twist.angular.z = 0.0
+                        time.sleep(1)
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                        self.thermal_updated = False # reset the variable once used
                     else:
                         self.stopbot()
-                        self.get_logger.info("Correct distance away from object")
+                        self.get_logger().info("Correct distance away from object")
                         # once correct distance and centered, can move to launcher part
                         break
-
-                
-
-                # allow the callback functions to run
-                rclpy.spin_once(self)
 
         #except Exception as e:
             #print(e)
@@ -626,6 +640,22 @@ class AutoNav(Node):
         finally:
             # stop moving
             self.stopbot()
+
+#    def launcher(self):
+#        try:
+#            while rclpy.ok():
+#                launcher = Launcher()
+#                launcher.start_launcher()
+#                if self.centered == True:
+#                       
+#
+#        #except Exception as e:
+#        #print(e)
+#        
+#        # Ctrl-c detected
+#        finally:
+#            # stop moving
+#            self.stopbot()
 
 
 def main(args=None):
@@ -640,7 +670,6 @@ def main(args=None):
     #auto_nav.load_balls()
     #auto_nav.find_thermal()
     #auto_nav.find_objects()
-    #auto_nav.adjust_bot()
     #auto_nav.launcher()
 
     # Destroy the node explicitly
