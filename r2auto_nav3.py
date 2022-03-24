@@ -122,6 +122,11 @@ class AutoNav(Node):
         self.x_travelled_dist = 0.0 
         self.y_travelled_dist = 0.0
         self.size = 0.0
+        self.finished_mapping = False
+        # move thermal_found to thermal sub once it is created
+        self.thermal_found = False
+        # move button_pressed to button sub once it is created
+        self.button_pressed = False
         
         # create subscription to track occupancy
         self.occ_subscription = self.create_subscription(
@@ -1013,12 +1018,59 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
+    def load_balls(self):
+        self.get_logger().info("Loading balls phase started")
+        try:
+            while rclpy.ok():
+                if self.loaded == True:
+                    self.get_logger().info("Balls loaded, moving off in 5 seconds")
+                    # 5 sec delay added to allow TA to move out of the way
+                    time.sleep(5.0)
+                    self.get_logger().info("Moving off now")
+                    break
+
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+
+        except Exception as e:
+            print(e)
+        
+        # Ctrl-c detected
+        finally:
+            # stop moving
+            self.stopbot()
+
+    def find_objects(self):
+        try:
+            while rclpy.ok():
+                if self.nfcfound == True and self.thermalfound == True:
+                    self.get_logger().info("Both NFC and object found")
+                    break
+                elif self.nfcfound == True and self.thermal_found == False:
+                    self.get_logger().info("NFC found, finding thermal now")
+                    # self.find_thermal()
+                    # add move forward temporarily so that bot can move
+                    self.move_forward()
+                else:
+                    self.get_logger().info("Both not found, finding NFC now")
+                    # self.find_nfc()
+                    # add move forward temporarily so that bot can move
+                    self.move_forward()
+        except Exception as e:
+            print(e)
+        
+        # Ctrl-c detected
+        finally:
+            # stop moving
+            self.stopbot()
+
 def main(args=None):
     rclpy.init(args=args)
 
     auto_nav = AutoNav()
     auto_nav.complete_maze()
-    #auto_nav.load_balls()
+    auto_nav.load_balls()
+    auto_nav.find_objects()
     #auto_nav.adjust_bot()
     #auto_nav.launcher()
 

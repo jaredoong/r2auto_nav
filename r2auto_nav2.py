@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+## NEW ALGO
+# Wall follower around the entire maze first, then move to centre and travel up to down and left to right along centre line to map entire maze
+# Dimension of wall kept in variable once first obj met
+# If unable to locate NFC yet, travel in decrements of 50cm till object is found
+# If unable to find thermal yet, navigate around wall of maze, turning everytime distance of opp wall suddenly increases it will rotate 180
+# whenever it reaches the corners of the maze, will alos rotate back to direction it came from before turning back to start moving off. (thermal)
+
 import random
 from signal import pthread_kill
 import rclpy
