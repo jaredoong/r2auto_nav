@@ -25,10 +25,8 @@ import math
 import cmath
 import time,sys
 import matplotlib.pyplot as plt
-# load AMG8833 module
-from .amg8833 import amg8833_i2c
 
-from custom_msgs.msg import Nfc, Button, Thermal, Launcher
+from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 
 # constants
 rotatechange = 0.2
@@ -48,7 +46,6 @@ FRONT_RIGHT = 135
 LEFT = 270
 RIGHT = 90
 BACK = 0
-
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -82,8 +79,8 @@ class AutoNav(Node):
         self.publisher_ = self.create_publisher(Twist,'cmd_vel',10)
         # self.get_logger().info('Created publisher')
 
-        # create publisher for starting launcher
-        self.publisher_launcher = self.create_publisher(Launcher,'start_launcher',10)
+        # create publisher for starting flywheels
+        self.publisher_flywheel = self.create_publisher(Flywheel,'start_flywheel',10)
         # self.get_logger().info('Created publisher')
 
         # create subscription to track orientation
@@ -147,12 +144,20 @@ class AutoNav(Node):
         self.thermalimg = np.zeros((8,8))
         self.thermal_subscription # prevent unused variable warning
 
+        # create subscription to check if finished shooting
+        self.launcher_subscription = self.create_subscription(
+            Launcher,
+            'finished_shooting',
+            self.launcher_callback,
+            10)
+        self.done_shooting = False
+        self.launcher_subscription # prevent unused variable warning
+
     def odom_callback(self, msg):
         # self.get_logger().info('In odom_callback')
         orientation_quat =  msg.pose.pose.orientation
         self.x_pos, self.y_pos, self.z_pos =  msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
-        # self.get_logger().info('X-axis: %.2f, Y-axis: %.2f, Z-axis: %.2f' % (self.x_pos, self.y_pos, self.z_pos))
 
 
     def occ_callback(self, msg):
@@ -201,6 +206,10 @@ class AutoNav(Node):
         print("New data received")
         print(self.thermalimg)
         self.thermal_updated = True
+
+    def launcher_callback(self, msg):
+        self.done_shooting = msg.finished_shooting
+        self.get_logger().info('Finished shooting: "%s"' % msg.finished_shooting)
 
     # for moving straight forward in current direction
     def move_forward(self):
@@ -617,21 +626,25 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
-#    def launcher(self):
-#        try:
-#            while rclpy.ok():
-#                launcher = Launcher()
-#                launcher.start_launcher()
-#                if self.centered == True:
-#                       
-#
-#        #except Exception as e:
-#        #print(e)
-#        
-#        # Ctrl-c detected
-#        finally:
-#            # stop moving
-#            self.stopbot()
+    # function to start up the launcher and check if it is done
+    def launcher(self):
+        try:
+            flywheel = Flywheel()
+            flywheel.start_flywheel = True
+            self.publisher_flywheel.publish(flywheel)
+
+            while rclpy.ok():
+                if self.done_shooting == True:
+                    self.get_logger().info("Done shooting")
+                    break
+
+        #except Exception as e:
+        #print(e)
+        
+        # Ctrl-c detected
+        finally:
+            # stop moving
+            self.stopbot()
 
 
 def main(args=None):
@@ -642,7 +655,8 @@ def main(args=None):
     auto_nav.find_nfc()
     auto_nav.load_balls()
     auto_nav.find_thermal()
-    #auto_nav.launcher()
+    auto_nav.launcher()
+    #auto_nav.map_maze()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
