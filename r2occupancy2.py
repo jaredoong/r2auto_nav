@@ -68,6 +68,7 @@ class Occupy(Node):
     def listener_callback(self, msg):
         # create numpy array
         occdata = np.array(msg.data)
+        np.savetxt("occdata.txt",occdata)
         # compute histogram to identify bins with -1, values between 0 and below 50, 
         # and values between 50 and 100. The binned_statistic function will also
         # return the bin numbers so we can use that easily to create the image 
@@ -75,10 +76,11 @@ class Occupy(Node):
         # get width and height of map
         iwidth = msg.info.width
         iheight = msg.info.height
+        self.get_logger().info('Width: %i Height: %i' % (iwidth, iheight))
         # calculate total number of bins
         total_bins = iwidth * iheight
         # log the info
-        # self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0], occ_counts[1], occ_counts[2], total_bins))
+        self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0], occ_counts[1], occ_counts[2], total_bins))
 
         # find transform to obtain base_link coordinates in the map frame
         # lookup_transform(target_frame, source_frame, time)
@@ -107,6 +109,13 @@ class Occupy(Node):
         # binnum go from 1 to 3 so we can use uint8
         # convert into 2D array using column order
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
+
+        # print out the 2D array to see what it is like
+        # width is shown by the num of columns, height is shown by num of rows
+        ### Figure out what does the 1,2,3 in the data mean
+        np.savetxt("odata.txt",odata)
+
+
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
         # create image from 2D array using PIL

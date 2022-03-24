@@ -26,6 +26,9 @@ setup(
             'r2occupancy = auto_nav.r2occupancy:main',
             'r2occupancy2 = auto_nav.r2occupancy2:main',
             'r2auto_nav = auto_nav.r2auto_nav:main',
+            'r2auto_nav2 = auto_nav.r2auto_nav2:main',
+            'r2auto_nav3 = auto_nav.r2auto_nav3:main',
+            'r2wall_follower = auto_nav.r2wall_follower:main',
         ],
     },
 )
