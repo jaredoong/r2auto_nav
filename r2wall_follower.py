@@ -30,7 +30,7 @@ from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 
 # constants
 rotatechange = 0.2
-slowrotate = 0.40 # working at 0.70
+slowrotate = 0.70 # working at 0.70
 fastrotate = 0.90
 speedchange = 0.18
 occ_bins = [-1, 0, 100, 101]
@@ -39,13 +39,13 @@ front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 32 # calibrated to temp of thermal object
-FRONT = 180
-FRONT_LEFT = 225
-FRONT_RIGHT = 135
-LEFT = 270
-RIGHT = 90
-BACK = 0
+threshold_temp = 30 # calibrated to temp of thermal object
+FRONT = 0
+FRONT_LEFT = 45
+FRONT_RIGHT = 315
+LEFT = 90
+RIGHT =270
+BACK = 180
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -531,18 +531,8 @@ class AutoNav(Node):
                 flywheel = Flywheel()
                 flywheel.start_flywheel = False
                 self.publisher_flywheel.publish(flywheel)
-                self.get_logger().info("Publishing flywheel cannot start")
+                #self.get_logger().info("Publishing flywheel cannot start")
 
-                if self.thermalfound == False:
-                    self.get_logger().info("Thermal object not yet found")
-                    # do wall following algo to find thermal object
-                    # self.left_follow_wall()
-                    self.get_logger().info("finding thermal")
-
-                else:
-                    # if thermal object is found, stop the bot
-                    self.stopbot()
-                
                 # waits for thermal data to be updated
                 if self.thermal_updated == False:
                     self.get_logger().info("Waiting for new data")
@@ -577,9 +567,19 @@ class AutoNav(Node):
                     row_num += 1
                 # for checking with columns the object detected in    
                 print(("Columns found: {}").format(cols_found))
+
+                if self.thermalfound == False:
+                    self.get_logger().info("Thermal object not yet found")
+                    # do wall following algo to find thermal object
+                    self.left_follow_wall()
+                    #self.get_logger().info("finding thermal")
+
+                else:
+                    # if thermal object is found, stop the bot
+                    self.stopbot()
                 
                 # adjusting of position of bot relative to thermal object
-                if len(cols_found) != 0 and self.centered == False:
+                if len(cols_found) != 0:
                     # use the middle column to align
                     reference_col = cols_found[int(len(cols_found) / 2)]
                     if reference_col  < 3:
@@ -590,6 +590,7 @@ class AutoNav(Node):
                         time.sleep(1)
                         self.get_logger().info("Turning left to centralise bot")
                         self.publisher_.publish(twist)
+                        self.centered = False
                         time.sleep(1)
                     elif reference_col > 4:
                         # turn right to centralise the object
@@ -600,6 +601,7 @@ class AutoNav(Node):
                         self.get_logger().info("Turning right to centralise bot")
                         self.publisher_.publish(twist)
                         time.sleep(1)
+                        self.centered = False
                     else:
                         self.centered = True
                         self.stopbot()
@@ -682,11 +684,11 @@ def main(args=None):
 
     auto_nav = AutoNav()
 
-    #auto_nav.find_nfc()
-    #auto_nav.load_balls()
-    #auto_nav.find_thermal()
+    auto_nav.find_nfc()
+    auto_nav.load_balls()
+    auto_nav.find_thermal()
     auto_nav.launcher()
-    #auto_nav.map_maze()
+    auto_nav.map_maze()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
