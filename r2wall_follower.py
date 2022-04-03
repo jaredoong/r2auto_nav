@@ -23,14 +23,14 @@ from nav_msgs.msg import OccupancyGrid
 import numpy as np
 import math
 import cmath
-import time,sys
+import time
 import matplotlib.pyplot as plt
 
 from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 
 # constants
 rotatechange = 0.2
-slowrotate = 0.70
+slowrotate = 0.40 # working at 0.70
 fastrotate = 0.90
 speedchange = 0.18
 occ_bins = [-1, 0, 100, 101]
@@ -39,7 +39,7 @@ front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 30 # calibrated to temp of thermal object
+threshold_temp = 32 # calibrated to temp of thermal object
 FRONT = 180
 FRONT_LEFT = 225
 FRONT_RIGHT = 135
@@ -138,7 +138,7 @@ class AutoNav(Node):
             Thermal,
             'thermal',
             self.thermal_callback,
-            10)
+            1)
         self.thermalfound = False
         self.thermal_updated = False
         self.thermalimg = np.zeros((8,8))
@@ -201,7 +201,7 @@ class AutoNav(Node):
         # data set into 8x8 array
         self.thermalimg = np.reshape(self.thermalimg,(8,8))
         # flip both vertically and horizontally 
-        self.thermalimg = np.fliplr(self.thermalimg)
+        #self.thermalimg = np.fliplr(self.thermalimg)
         self.thermalimg = np.flipud(self.thermalimg)
         print("New data received")
         print(self.thermalimg)
@@ -527,9 +527,25 @@ class AutoNav(Node):
             while rclpy.ok():
                 # allow the callback functions to run
                 rclpy.spin_once(self)
+
+                flywheel = Flywheel()
+                flywheel.start_flywheel = False
+                self.publisher_flywheel.publish(flywheel)
+                self.get_logger().info("Publishing flywheel cannot start")
+
+                if self.thermalfound == False:
+                    self.get_logger().info("Thermal object not yet found")
+                    # do wall following algo to find thermal object
+                    # self.left_follow_wall()
+                    self.get_logger().info("finding thermal")
+
+                else:
+                    # if thermal object is found, stop the bot
+                    self.stopbot()
                 
                 # waits for thermal data to be updated
                 if self.thermal_updated == False:
+                    self.get_logger().info("Waiting for new data")
                     continue
 
                 # Plotting in real time
@@ -561,63 +577,48 @@ class AutoNav(Node):
                     row_num += 1
                 # for checking with columns the object detected in    
                 print(("Columns found: {}").format(cols_found))
-
-                if self.thermalfound == False:
-                    self.get_logger().info("Thermal object not yet found")
-                    # do wall following algo to find thermal object
-                    self.left_follow_wall()
-
-                else:
-                    # if thermal object is found, stop the bot
-                    self.stopbot()
-
-                    if len(cols_found) == 0:
-                        self.get_logger().info("Item lost, back to wall following")
-                        self.thermalfound = False
-                        continue
                 
-                    # adjusting of position of bot relative to thermal object
-                    if len(cols_found) != 0 and self.centered == False:
-                        # use the middle column to align
-                        reference_col = cols_found[int(len(cols_found) / 2)]
-                        if reference_col  < 3:
-                            # turn left to centralise the object
-                            twist = Twist()
-                            twist.linear.x = 0.0
-                            twist.angular.z = 0.2*slowrotate
-                            time.sleep(1)
-                            self.get_logger().info("Turning left to centralise bot")
-                            self.publisher_.publish(twist)
-                            time.sleep(1)
-                        elif reference_col > 4:
-                            # turn right to centralise the object
-                            twist = Twist()
-                            twist.linear.x = 0.0
-                            twist.angular.z = -0.2*slowrotate
-                            time.sleep(1)
-                            self.get_logger().info("Turning right to centralise bot")
-                            self.publisher_.publish(twist)
-                            time.sleep(1)
-                        else:
-                            self.centered = True
-                            self.stopbot()
-
-                    if self.centered:
-                        self.get_logger().info("Centralised")
-                        # if too far away, move closer to object
-                        if (len(cols_found) < 4):
-                            twist = Twist()
-                            twist.linear.x = 0.5 * speedchange
-                            twist.angular.z = 0.0
-                            time.sleep(1)
-                            self.publisher_.publish(twist)
-                            time.sleep(1)
-                        else:
-                            self.stopbot()
-                            self.get_logger().info("Correct distance away from object")
-                            # once correct distance and centered, can move to launcher part
-                            break
-
+                # adjusting of position of bot relative to thermal object
+                if len(cols_found) != 0 and self.centered == False:
+                    # use the middle column to align
+                    reference_col = cols_found[int(len(cols_found) / 2)]
+                    if reference_col  < 3:
+                        # turn left to centralise the object
+                        twist = Twist()
+                        twist.linear.x = 0.0
+                        twist.angular.z = 0.2*slowrotate
+                        time.sleep(1)
+                        self.get_logger().info("Turning left to centralise bot")
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    elif reference_col > 4:
+                        # turn right to centralise the object
+                        twist = Twist()
+                        twist.linear.x = 0.0
+                        twist.angular.z = -0.2*slowrotate
+                        time.sleep(1)
+                        self.get_logger().info("Turning right to centralise bot")
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    else:
+                        self.centered = True
+                        self.stopbot()
+                if self.centered:
+                    self.get_logger().info("Centralised")
+                    # if too far away, move closer to object
+                    if (len(cols_found) < 3):
+                        twist = Twist()
+                        twist.linear.x = 0.5 * speedchange
+                        twist.angular.z = 0.0
+                        time.sleep(1)
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    else:
+                        self.stopbot()
+                        self.get_logger().info("Correct distance away from object")
+                        # once correct distance and centered, can move to launcher part
+                        break
+                    
         except Exception as e:
             print(e)
         
@@ -632,8 +633,11 @@ class AutoNav(Node):
             flywheel = Flywheel()
             flywheel.start_flywheel = True
             self.publisher_flywheel.publish(flywheel)
+            self.get_logger().info("Published ready to start flywheel")
 
             while rclpy.ok():
+                rclpy.spin_once(self)
+                self.get_logger().info("Waiting for shooting to be finished")
                 if self.done_shooting == True:
                     self.get_logger().info("Done shooting")
                     break
@@ -646,15 +650,41 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
+    def map_maze(self):
+        try:
+            #  ensure data being received from LIDAR before starting
+            while (len(self.laser_range) == 0):
+                self.get_logger().info("Fetching LIDAR data")
+                rclpy.spin_once(self)
+
+            # Move forward once ready
+            self.move_forward()
+            
+            while rclpy.ok():
+                # move around the perimeter of the maze
+                self.left_follow_wall()
+
+                # allow the callback functions to run
+                rclpy.spin_once(self)
+
+        except Exception as e:
+            print(e)
+        
+        # Ctrl-c detected
+        finally:
+            # stop moving
+            self.stopbot()
+            
+
 
 def main(args=None):
     rclpy.init(args=args)
 
     auto_nav = AutoNav()
 
-    auto_nav.find_nfc()
-    auto_nav.load_balls()
-    auto_nav.find_thermal()
+    #auto_nav.find_nfc()
+    #auto_nav.load_balls()
+    #auto_nav.find_thermal()
     auto_nav.launcher()
     #auto_nav.map_maze()
 
