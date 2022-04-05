@@ -664,17 +664,16 @@ class AutoNav(Node):
 
     def map_maze(self):
         try:
+            # initialize variable to write elapsed time to file
+            # contourCheck = 1
             #  ensure data being received from LIDAR before starting
             while (len(self.laser_range) == 0):
                 self.get_logger().info("Fetching LIDAR data")
                 rclpy.spin_once(self)
-
             # Move once ready
             while rclpy.ok():
-                # move around the perimeter of the maze
-                ### CHANGE BASED ON SCENARIO
-                self.left_follow_wall(stop_distance, speed_change, slow_rotate, fast_rotate)
-
+                ## CHANGE BASED ON SCENARIO
+                self.left_follow_wall(nfc_stopdistance, nfc_speedchange, nfc_slowrotate, nfc_fastrotate)
                 # allow the callback functions to run
                 rclpy.spin_once(self)
 
@@ -695,8 +694,8 @@ def main(args=None):
     auto_nav.load_balls()
     auto_nav.find_thermal()
     auto_nav.launcher()
-    #auto_nav.map_maze()
-    auto_nav.find_nfc()
+    auto_nav.map_maze()
+    #auto_nav.find_nfc()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
