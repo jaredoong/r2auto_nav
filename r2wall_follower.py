@@ -32,14 +32,15 @@ from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 rotatechange = 0.2
 occ_bins = [-1, 0, 100, 101]
 
-nfc_slowrotate = 0.70
-nfc_fastrotate = 0.90
-nfc_speedchange = 0.18
-nfc_stopdistance = 0.23
-slow_rotate = 0.9
-fast_rotate = 1.5
-stop_distance = 0.32
-speed_change = 0.20
+#nfc_slowrotate = 0.70
+#nfc_fastrotate = 0.90
+#nfc_speedchange = 0.18
+#nfc_stopdistance = 0.23 #prev 0.23
+slow_rotate = 0.7
+fast_rotate = 0.9
+speed_change = 0.18
+stop_distance = 0.23
+
 
 front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
@@ -48,10 +49,13 @@ mapfile = 'map.txt'
 threshold_temp = 31 # calibrated to temp of thermal object
 FRONT = 0
 FRONT_LEFT = 45
+#FRONT_LEFT_LEFT = 68
 FRONT_RIGHT = 315
+#FRONT_RIGHT_RIGHT = 338
 LEFT = 90
 RIGHT =270
 BACK = 180
+TOTAL_NFC = 1 # number of detectable NFC in 1 round
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -311,6 +315,10 @@ class AutoNav(Node):
         front = np.nan_to_num(self.laser_range[FRONT], nan=3.5 ,posinf=3.5)
         frontright = np.nan_to_num(self.laser_range[FRONT_RIGHT], nan=3.5 ,posinf=3.5)
         frontleft = np.nan_to_num(self.laser_range[FRONT_LEFT], nan=3.5 ,posinf=3.5)
+        #frontleftleft = np.nan_to_num(self.laser_range[FRONT_LEFT_LEFT], nan=3.5 ,posinf=3.5)
+        #frontrightright = np.nan_to_num(self.laser_range[FRONT_RIGHT_RIGHT], nan=3.5 ,posinf=3.5)
+        left = np.nan_to_num(self.laser_range[LEFT], nan=3.5 ,posinf=3.5)
+        right = np.nan_to_num(self.laser_range[RIGHT], nan=3.5 ,posinf=3.5)
 
         self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
 
@@ -371,14 +379,11 @@ class AutoNav(Node):
             twist.angular.z = -fast_r
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
-            if frontleft < 0.25 and frontright < 0.25:
-                self.get_logger().info("Reversing to move out of the way")
-                self.move_backward()
-                time.sleep(1)
-                self.rotatebot(RIGHT)
-                twist.linear.x = speed*0.5
-                twist.angular.z = slow_r
-            else:   
+            if left < d and right < d:
+                self.get_logger().info("HELP ME STEPBRO IM STUCK, fast turn right to escape dead end")
+                twist.linear.x = 0.0
+                twist.angular.z = -fast_r
+            else:
                 self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
                 twist.linear.x = speed*0.5
                 twist.angular.z = slow_r
@@ -475,6 +480,7 @@ class AutoNav(Node):
         try:
             # initialize variable to write elapsed time to file
             # contourCheck = 1
+            num_nfc_found = 0
 
             #  ensure data being received from LIDAR before starting
             while (len(self.laser_range) == 0):
@@ -483,15 +489,17 @@ class AutoNav(Node):
 
             # Move once ready
             while rclpy.ok():
+                ## CHANGE BASED ON SCENARIO
+                self.left_follow_wall(stop_distance, speed_change, slow_rotate, fast_rotate)
+
                 if self.nfcfound == True :
                     self.stopbot()
                     self.get_logger().info("NFC found")
-                    # move into loading phase
-                    break
-
-                # move to wall follwing algo if NFC not found
-                ## CHANGE BASED ON SCENARIO
-                self.left_follow_wall(nfc_stopdistance, nfc_speedchange, nfc_slowrotate, nfc_fastrotate)
+                    num_nfc_found += 1
+                    self.get_logger().info("Num of NFC found: %i" % num_nfc_found)
+                    if num_nfc_found > TOTAL_NFC: # number of NFC detected in one full round
+                        # move into loading phase
+                        break
 
                 # allow the callback functions to run
                 rclpy.spin_once(self)
@@ -676,28 +684,28 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
-    def map_maze(self):
-        try:
-            # initialize variable to write elapsed time to file
-            # contourCheck = 1
-            #  ensure data being received from LIDAR before starting
-            while (len(self.laser_range) == 0):
-                self.get_logger().info("Fetching LIDAR data")
-                rclpy.spin_once(self)
-            # Move once ready
-            while rclpy.ok():
-                ## CHANGE BASED ON SCENARIO
-                self.left_follow_wall(nfc_stopdistance, nfc_speedchange, nfc_slowrotate, nfc_fastrotate)
-                # allow the callback functions to run
-                rclpy.spin_once(self)
-
-        except Exception as e:
-            print(e)
-        
-        # Ctrl-c detected
-        finally:
-            # stop moving
-            self.stopbot()
+    #def map_maze(self):
+    #    try:
+    #        # initialize variable to write elapsed time to file
+    #        # contourCheck = 1
+    #        #  ensure data being received from LIDAR before starting
+    #        while (len(self.laser_range) == 0):
+    #            self.get_logger().info("Fetching LIDAR data")
+    #            rclpy.spin_once(self)
+    #        # Move once ready
+    #        while rclpy.ok():
+    #            ## CHANGE BASED ON SCENARIO
+    #            self.left_follow_wall(nfc_stopdistance, nfc_speedchange, nfc_slowrotate, nfc_fastrotate)
+    #            # allow the callback functions to run
+    #            rclpy.spin_once(self)
+#
+    #    except Exception as e:
+    #        print(e)
+    #    
+    #    # Ctrl-c detected
+    #    finally:
+    #        # stop moving
+    #        self.stopbot()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -708,7 +716,7 @@ def main(args=None):
     auto_nav.load_balls()
     auto_nav.find_thermal()
     auto_nav.launcher()
-    auto_nav.map_maze()
+    #auto_nav.map_maze()
     #auto_nav.find_nfc()
 
     # Destroy the node explicitly
