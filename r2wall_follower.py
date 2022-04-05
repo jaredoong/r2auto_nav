@@ -374,7 +374,7 @@ class AutoNav(Node):
             if frontleft < 0.20 or frontright < 0.20:
                 self.get_logger().info("Reversing to move out of the way")
                 self.move_backward()
-                time.sleep(1.0)
+                time.sleep(0.75)
                 self.rotatebot(RIGHT)
                 twist.linear.x = speed*0.5
                 twist.angular.z = slow_r
