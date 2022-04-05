@@ -689,7 +689,8 @@ def main(args=None):
     auto_nav.load_balls()
     auto_nav.find_thermal()
     auto_nav.launcher()
-    auto_nav.map_maze()
+    #auto_nav.map_maze()
+    auto_nav.find_nfc()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
