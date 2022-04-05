@@ -225,6 +225,18 @@ class AutoNav(Node):
         time.sleep(1)
         self.publisher_.publish(twist)
 
+    # for moving straight forward in current direction
+    def move_backward(self):
+        # start moving forward
+        self.get_logger().info('Moving forward')
+        twist = Twist()
+        twist.linear.x = -speed_change
+        twist.angular.z = 0.0
+        # not sure if this is really necessary, but things seem to work more
+        # reliably with this
+        time.sleep(1)
+        self.publisher_.publish(twist)
+
     # function to rotate the TurtleBot
     def rotatebot(self, rot_angle):
         # self.get_logger().info('In rotatebot')
@@ -360,8 +372,10 @@ class AutoNav(Node):
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
             if frontleft < 0.23 and frontright < 0.23:
-                self.get_logger().info("U-turning to move out of the way")
-                self.rotatebot(BACK)
+                self.get_logger().info("Reversing to move out of the way")
+                self.move_backward()
+                time.sleep(0.5)
+                self.rotatebot(RIGHT)
                 twist.linear.x = speed*0.5
                 twist.angular.z = slow_r
             else:   
