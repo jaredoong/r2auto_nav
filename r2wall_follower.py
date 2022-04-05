@@ -359,9 +359,15 @@ class AutoNav(Node):
             twist.angular.z = -fast_r
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
-            self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
-            twist.linear.x = speed*0.5
-            twist.angular.z = slow_r
+            if frontleft < 0.2 and frontright < 0.2:
+                self.get_logger().info("U-turning to move out of the way")
+                self.rotatebot(BACK)
+                twist.linear.x = speed*0.5
+                twist.angular.z = slow_r
+            else:   
+                self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
+                twist.linear.x = speed*0.5
+                twist.angular.z = slow_r
         # in event of unaccounted for cases, which should not happen
         else:
             self.get_logger().info("Unaccounted case, fix code")
