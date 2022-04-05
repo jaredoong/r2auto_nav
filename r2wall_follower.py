@@ -359,7 +359,7 @@ class AutoNav(Node):
             twist.angular.z = -fast_r
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
-            if frontleft < 0.2 and frontright < 0.2:
+            if frontleft < 0.23 and frontright < 0.23:
                 self.get_logger().info("U-turning to move out of the way")
                 self.rotatebot(BACK)
                 twist.linear.x = speed*0.5
