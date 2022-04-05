@@ -232,8 +232,8 @@ class AutoNav(Node):
         twist = Twist()
 
         # set the correct direction
-        self.curr_dir = (self.curr_dir + rot_angle) % 360
-        self.get_logger().info('Wanted dir is %i' % self.curr_dir)
+        #self.curr_dir = (self.curr_dir + rot_angle) % 360
+        #self.get_logger().info('Wanted dir is %i' % self.curr_dir)
         
         # get current yaw angle
         current_yaw = self.yaw
