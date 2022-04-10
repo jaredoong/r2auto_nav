@@ -38,15 +38,15 @@ occ_bins = [-1, 0, 100, 101]
 #nfc_stopdistance = 0.23 #prev 0.23
 slow_rotate = 0.7
 fast_rotate = 0.9
-speed_change = 0.18
-stop_distance = 0.23
+speed_change = 0.20
+stop_distance = 0.25
 
 
 front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 31 # calibrated to temp of thermal object
+threshold_temp = 35 # calibrated to temp of thermal object
 FRONT = 0
 FRONT_LEFT = 45
 #FRONT_LEFT_LEFT = 68
@@ -343,11 +343,11 @@ class AutoNav(Node):
         # wall detected on front left only, follow the wall
         elif front > d and frontleft < d and frontright > d:
             # check if bot is too close to the wall, if yes move away slightly
-            # considered too close if left side is d-5cm
-            if frontleft < (d-0.05):
-                self.get_logger().info("Too close to left wall, slow turning right slightly")
-                twist.linear.x = speed*0.5
-                twist.angular.z = -slow_r
+            # considered too close if left side is 25cm
+            if frontleft < (0.25) or left < 0.2:
+                self.get_logger().info("Too close to left wall, fast turning right slightly")
+                twist.linear.x = speed *0.5 # prev at 0
+                twist.angular.z = -fast_r
             # no changes needed, continue moving forward
             else:
                 self.get_logger().info("Correct distance, following wall")
@@ -356,14 +356,14 @@ class AutoNav(Node):
         
         # wall detected on front right only, turn left to find wall
         elif front > d and frontleft > d and frontright < d:
-            self.get_logger().info("Wall at front right only, slow turning left to find wall")
+            self.get_logger().info("Wall at front right only, fast turning left to find wall")
             twist.linear.x = speed*0.5
-            twist.angular.z = slow_r
+            twist.angular.z = fast_r # prev slow
         
         # wall detected on front left and front, turn right to avoid collision
         elif front < d and frontleft < d and frontright > d:
             self.get_logger().info("Wall at front and front left, fast turning right to avoid collision")
-            twist.linear.x = 0.0
+            twist.linear.x = 0.0 # prev 0.5
             twist.angular.z = -fast_r
 
         # wall detected on front and front right, turn right to avoid collision
@@ -380,13 +380,13 @@ class AutoNav(Node):
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
             if left < d and right < d:
-                self.get_logger().info("HELP ME STEPBRO IM STUCK, fast turn right to escape dead end")
+                self.get_logger().info("Stuck in a corner, fast turn right to escape dead end")
                 twist.linear.x = 0.0
                 twist.angular.z = -fast_r
             else:
                 self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
                 twist.linear.x = speed*0.5
-                twist.angular.z = slow_r
+                twist.angular.z = fast_r
         # in event of unaccounted for cases, which should not happen
         else:
             self.get_logger().info("Unaccounted case, fix code")
@@ -404,11 +404,13 @@ class AutoNav(Node):
         front = np.nan_to_num(self.laser_range[FRONT], nan=3.5 ,posinf=3.5)
         frontright = np.nan_to_num(self.laser_range[FRONT_RIGHT], nan=3.5 ,posinf=3.5)
         frontleft = np.nan_to_num(self.laser_range[FRONT_LEFT], nan=3.5 ,posinf=3.5)
+        left = np.nan_to_num(self.laser_range[LEFT], nan=3.5 ,posinf=3.5)
+        right = np.nan_to_num(self.laser_range[RIGHT], nan=3.5 ,posinf=3.5)
 
         self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
 
         # to calculate the diagonal stopping distance
-        d = stop_d / math.cos(math.radians(45))
+        d = stop_d / math.cos(math.radians(45)) + 0.05
 
         # main logic for the wall follower algo, keeps track of right wall and follow it
         # wall detected if < d, else not detected
@@ -428,11 +430,11 @@ class AutoNav(Node):
         # wall detected on front right only, follow the wall
         elif front > d and frontleft > d and frontright < d:
             # check if bot is too close to the wall, if yes move away slightly
-            # considered too close if right side is d-5cm
-            if frontright < (d-0.05):
-                self.get_logger().info("Too close to right wall, slow turning left slightly")
-                twist.linear.x = speed*0.5
-                twist.angular.z = slow_r
+            # considered too close if right side is 25cm
+            if frontright < (0.25):
+                self.get_logger().info("Too close to right wall, fast turning left slightly")
+                twist.linear.x = 0.0
+                twist.angular.z = fast_r
             # no changes needed, continue moving forward
             else:
                 self.get_logger().info("Correct distance, following wall")
@@ -448,12 +450,12 @@ class AutoNav(Node):
         # wall detected on front right and front, turn left to avoid collision
         elif front < d and frontleft > d and frontright < d:
             self.get_logger().info("Wall at front and front right, fast turning left to avoid collision")
-            twist.linear.x = 0.0
+            twist.linear.x = speed*0.5
             twist.angular.z = fast_r
 
         # wall detected on front and front left, turn left to avoid collision
         elif front < d and frontleft < d and frontright > d:
-            self.get_logger().info("Wall at front and front right, fast turning left to avoid collision")
+            self.get_logger().info("Wall at front and front left, fast turning left to avoid collision")
             twist.linear.x = 0.0
             twist.angular.z = fast_r
 
@@ -465,9 +467,14 @@ class AutoNav(Node):
 
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
-            self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
-            twist.linear.x = speed*0.5
-            twist.angular.z = slow_r
+            if left < d and right < d:
+                self.get_logger().info("Stuck in a corner, fast turn left to escape dead end")
+                twist.linear.x = 0.0
+                twist.angular.z = fast_r
+            else:
+                self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
+                twist.linear.x = speed*0.5
+                twist.angular.z = slow_r
 
         # in event of unaccounted for cases, which should not happen
         else:
@@ -553,6 +560,8 @@ class AutoNav(Node):
             fig.canvas.draw() # draw figure
             ax_bgnd = fig.canvas.copy_from_bbox(ax.bbox) # background for speeding up runs
             fig.show() # show figure
+
+            #num_center = 0
 
             while rclpy.ok():
                 # allow the callback functions to run
@@ -640,19 +649,27 @@ class AutoNav(Node):
                         self.stopbot()
                 if self.centered:
                     self.get_logger().info("Centralised")
+                    
+                    #self.rotatebot(10)
                     # if too far away, move closer to object
-                    #if (len(cols_found) < 3):
-                    #    twist = Twist()
-                    #    twist.linear.x = 0.2 * speed_change
-                    #    twist.angular.z = 0.0
-                    #    time.sleep(1)
-                    #    self.publisher_.publish(twist)
-                    #    time.sleep(1)
+                    if (len(cols_found) < 3):
+                        twist = Twist()
+                        twist.linear.x = 0.5 * speed_change
+                        twist.angular.z = 0.0
+                        time.sleep(1)
+                        self.publisher_.publish(twist)
+                        time.sleep(1)
+                    else:
+                    #if num_center > 3:
+                        self.stopbot()
+                        self.get_logger().info("Correct distance away from object")
+                        break
                     #else:
-                    self.stopbot()
-                    self.get_logger().info("Correct distance away from object")
+                    #    num_center += 1
+                #else:
+                #    num_center = 0
                     # once correct distance and centered, can move to launcher part
-                    break
+                    
                     
         except Exception as e:
             print(e)
