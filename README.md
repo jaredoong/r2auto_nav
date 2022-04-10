@@ -54,6 +54,10 @@ To be added later on
 
 Currently missing amg8833 library, pn532 library, sensors.py
 
+## Important calibration required before starting
+* ```threshold_temp``` - This is the temperature of the heated tin can in the mission. For greater accuracy when targeting the tin can, this should be set to slightly below the temperature of the tin can. It is important to ensure that this value is not set too close to the average temperature of the surroundings to prevent false triggering of the launcher
+* ```TOTAL_NFC``` - This is the total number of detectable NFC in the maze. Due to the speed of the turtlebot, there is a possibility that the turtlebot is unable to sense the NFC tag even when it travels over it. Hence, it is necessary to test each NFC zone in the maze before the start of the mission. This is to ensure that the turtlebot stops only when it has completed the mapping of the maze. This constant value has to be updated in both [r2wall_follower.py](https://github.com/jaredoong/r2auto_nav/blob/main/r2wall_follower.py) and sensors.py.
+
 ## Setting up software on remote laptop
 
 
