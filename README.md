@@ -1,4 +1,4 @@
-# ROS2 foxy code for EG2310
+# ROS2 code for EG2310
 
 ## Mission
 For this project, our turtlebot was required to complete the following tasks.
@@ -22,19 +22,13 @@ colcon_ws
 ├── log
 └── src
     ├── auto_nav
-    │   ├── resources
-    │   ├── test
     │   ├── package.xml
     │   ├── setup.cfg
     │   ├── setup.py
     │   └── auto_nav
     │       ├── __init__.py
-    │       ├── package.xml
-    │       ├── setup.py
     │       └── r2wall_follower.py
     └── custom_msgs
-        ├── include
-        ├── src
         ├── msg
         │   ├── Button.msg
         │   ├── Flywheel.msg
@@ -46,13 +40,38 @@ colcon_ws
 ```
 
 ## Directory tree on RPi
-To be added later on
+```bash
+turtlebot_ws
+├── build
+├── install
+├── log
+└── src
+    ├── sensors
+    │   ├── package.xml
+    │   ├── setup.cfg
+    │   ├── setup.py
+    │   └── sensors
+    │       ├── pn532
+    │       ├── __init__.py
+    │       └── sensors.py
+    └── custom_msgs
+        ├── msg
+        │   ├── Button.msg
+        │   ├── Flywheel.msg
+        │   ├── Launcher.msg
+        │   ├── Nfc.msg
+        │   └── Thermal.msg
+        ├── CMakeLists.txt
+        └── package.xml
+```
 
 ## Important files
-* [r2wall_follower.py](https://github.com/jaredoong/r2auto_nav/blob/main/r2wall_follower.py) - This file contains the overall algorithm used for the mission. The main function used to navigate around the maze using the left wall-following algorithm is in ```left_follow_wall()```. The important functions used to complete the tasks include ```find_nfc()```, ```load_balls()```, ```find_thermal()```, ```launcher()```.
+* [r2wall_follower.py](https://github.com/jaredoong/r2auto_nav/blob/main/r2wall_follower.py) - This file contains the overall algorithm used for the mission. It contains subscribers that listen for the data received by the sensors, over topics in ```custom_msgs/msg```. The main function used to navigate around the maze using the left wall-following algorithm is in ```left_follow_wall()```. The important functions used to complete the tasks include ```find_nfc()```, ```load_balls()```, ```find_thermal()```, ```launcher()```.
 * [custom_msgs/msg] - This folder includes all the custom messages that are published by the nodes running on the remote laptop and the RPi in order to transmit important information. This package needs to exist on both the remote laptop and the RPi for the program to run properly. Steps for proper setup is described in detail [below](#Setting-up-software-on-remote-laptop).
+* [sensors.py] - This file contains the code to be run on the RPi. It is in charge of publishing the data from the sensors out to the remote laptop to let the remote laptop know when one task has been completed, which enables it to give the turtlebot the command to move on to the next task.
+* [pnc532] - This folder contains the library needed to use the PN532 NFC reader in I^2C
 
-Currently missing amg8833 library, pn532 library, sensors.py
+Currently missing amg8833 library, pn532 library.
 
 ## Important calibration required before starting
 * ```threshold_temp``` - This is the temperature of the heated tin can in the mission. For greater accuracy when targeting the tin can, this should be set to slightly below the temperature of the tin can. It is important to ensure that this value is not set too close to the average temperature of the surroundings to prevent false triggering of the launcher
