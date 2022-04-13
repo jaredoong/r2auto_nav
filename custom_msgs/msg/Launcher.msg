@@ -1,0 +1,1 @@
+bool finished_shooting
