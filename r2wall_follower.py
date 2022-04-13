@@ -28,20 +28,15 @@ import matplotlib.pyplot as plt
 
 from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 
-# constants
-rotatechange = 0.2
-occ_bins = [-1, 0, 100, 101]
-
-#nfc_slowrotate = 0.70
-#nfc_fastrotate = 0.90
-#nfc_speedchange = 0.18
-#nfc_stopdistance = 0.23 #prev 0.23
+# parameters determining speed of bot
 slow_rotate = 0.7
 fast_rotate = 0.9
 speed_change = 0.20
-stop_distance = 0.25
+stop_distance = 0.35
 
-
+# constants
+rotatechange = 0.2
+occ_bins = [-1, 0, 100, 101]
 front_angle = 20 # min angle to prevent any collision
 front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
@@ -49,13 +44,13 @@ mapfile = 'map.txt'
 threshold_temp = 35 # calibrated to temp of thermal object
 FRONT = 0
 FRONT_LEFT = 45
-#FRONT_LEFT_LEFT = 68
+FRONT_FRONT_LEFT = 338
 FRONT_RIGHT = 315
-#FRONT_RIGHT_RIGHT = 338
+FRONT_FRONT_RIGHT = 22
 LEFT = 90
 RIGHT =270
 BACK = 180
-TOTAL_NFC = 1 # number of detectable NFC in 1 round
+TOTAL_NFC = 3 # number of detectable NFC in 1 round
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -168,7 +163,7 @@ class AutoNav(Node):
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
 
     def occ_callback(self, msg):
-        #self.get_logger().info('In occ_callback')
+        # self.get_logger().info('In occ_callback')
         # create numpy array
         msgdata = np.array(msg.data)
         # compute histogram to identify percent of bins with -1
@@ -207,8 +202,7 @@ class AutoNav(Node):
         self.thermalimg = msg.thermal
         # data set into 8x8 array
         self.thermalimg = np.reshape(self.thermalimg,(8,8))
-        # flip both vertically and horizontally 
-        #self.thermalimg = np.fliplr(self.thermalimg)
+        # flip the data vertically
         self.thermalimg = np.flipud(self.thermalimg)
         print(self.thermalimg)
         self.thermal_updated = True
@@ -216,85 +210,6 @@ class AutoNav(Node):
     def launcher_callback(self, msg):
         self.done_shooting = msg.finished_shooting
         self.get_logger().info('Finished shooting: "%s"' % msg.finished_shooting)
-
-    # for moving straight forward in current direction
-    def move_forward(self):
-        # start moving forward
-        self.get_logger().info('Moving forward')
-        twist = Twist()
-        twist.linear.x = speed_change
-        twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
-        time.sleep(1)
-        self.publisher_.publish(twist)
-
-    # for moving straight forward in current direction
-    def move_backward(self):
-        # start moving forward
-        self.get_logger().info('Moving forward')
-        twist = Twist()
-        twist.linear.x = -speed_change
-        twist.angular.z = 0.0
-        # not sure if this is really necessary, but things seem to work more
-        # reliably with this
-        time.sleep(1)
-        self.publisher_.publish(twist)
-
-    # function to rotate the TurtleBot
-    def rotatebot(self, rot_angle):
-        # self.get_logger().info('In rotatebot')
-        # create Twist object
-        twist = Twist()
-
-        # set the correct direction
-        #self.curr_dir = (self.curr_dir + rot_angle) % 360
-        #self.get_logger().info('Wanted dir is %i' % self.curr_dir)
-        
-        # get current yaw angle
-        current_yaw = self.yaw
-        # log the info
-        # self.get_logger().info('Current: %f' % math.degrees(current_yaw))
-
-        # we are going to use complex numbers to avoid problems when the angles go from
-        # 360 to 0, or from -180 to 180
-        c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-        # calculate desired yaw
-        target_yaw = current_yaw + math.radians(rot_angle)
-        # self.get_logger().info('Actual target yaw is %f' % target_yaw)
-        
-        c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
-        self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
-        # divide the two complex numbers to get the change in direction
-        c_change = c_target_yaw / c_yaw
-        # get the sign of the imaginary component to figure out which way we have to turn
-        c_change_dir = np.sign(c_change.imag)
-        # set linear speed to zero so the TurtleBot rotates on the spot
-        twist.linear.x = 0.0
-        # set the direction to rotate
-        twist.angular.z = c_change_dir * rotatechange
-        # start rotation
-        self.publisher_.publish(twist)
-
-        # we will use the c_dir_diff variable to see if we can stop rotating
-        c_dir_diff = c_change_dir
-        # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-        # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
-        # becomes -1.0, and vice versa
-        while(c_change_dir * c_dir_diff > 0):
-            # allow the callback functions to run
-            rclpy.spin_once(self)
-            current_yaw = self.yaw
-            # convert the current yaw to complex form
-            c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-            # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
-            # get difference in angle between current and target
-            c_change = c_target_yaw / c_yaw
-            # get the sign to see if we can stop
-            c_dir_diff = np.sign(c_change.imag)
-            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-        self.stopbot()
-        self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
 
     def stopbot(self):
         self.get_logger().info('In stopbot')
@@ -315,12 +230,12 @@ class AutoNav(Node):
         front = np.nan_to_num(self.laser_range[FRONT], nan=3.5 ,posinf=3.5)
         frontright = np.nan_to_num(self.laser_range[FRONT_RIGHT], nan=3.5 ,posinf=3.5)
         frontleft = np.nan_to_num(self.laser_range[FRONT_LEFT], nan=3.5 ,posinf=3.5)
-        #frontleftleft = np.nan_to_num(self.laser_range[FRONT_LEFT_LEFT], nan=3.5 ,posinf=3.5)
-        #frontrightright = np.nan_to_num(self.laser_range[FRONT_RIGHT_RIGHT], nan=3.5 ,posinf=3.5)
+        frontfrontleft = np.nan_to_num(self.laser_range[FRONT_FRONT_LEFT], nan=3.5 ,posinf=3.5)
         left = np.nan_to_num(self.laser_range[LEFT], nan=3.5 ,posinf=3.5)
         right = np.nan_to_num(self.laser_range[RIGHT], nan=3.5 ,posinf=3.5)
 
-        self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
+        # for fine-tuning and debugging purposes
+        # self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
 
         # to calculate the diagonal stopping distance
         d = stop_d / math.cos(math.radians(45))
@@ -330,13 +245,19 @@ class AutoNav(Node):
 
         # if no wall detected at all, turn left slightly to find wall
         if front > d and frontleft > d and frontright > d:
-            self.get_logger().info("No obs at all, slow turning left to find the wall")
-            twist.linear.x = speed*0.5
-            twist.angular.z = slow_r
+            if frontfrontleft > d:
+                # self.get_logger().info("No obs at all, slow turning left to find the wall")
+                twist.linear.x = speed*0.5
+                twist.angular.z = fast_r
+            # to prevent bot from crashing into tin can
+            else:
+                # self.get_logger().info("Obs at front front left, moving forward and away from wall")
+                twist.linear.x = speed
+                twist.angular.z = slow_r
 
         # wall detected in front only, turn right to find wall on left side
         elif front < d and frontleft > d and frontright > d:
-            self.get_logger().info("Wall in front only, fast turning right")
+            # self.get_logger().info("Wall in front only, fast turning right")
             twist.linear.x = 0.0
             twist.angular.z = -fast_r
 
@@ -344,168 +265,74 @@ class AutoNav(Node):
         elif front > d and frontleft < d and frontright > d:
             # check if bot is too close to the wall, if yes move away slightly
             # considered too close if left side is 25cm
-            if frontleft < (0.25) or left < 0.2:
-                self.get_logger().info("Too close to left wall, fast turning right slightly")
-                twist.linear.x = speed *0.5 # prev at 0
+            if frontleft < (0.25):
+                # self.get_logger().info("Too close to left wall, fast turning right slightly")
+                twist.linear.x = speed*0.5
                 twist.angular.z = -fast_r
             # no changes needed, continue moving forward
             else:
-                self.get_logger().info("Correct distance, following wall")
+                # self.get_logger().info("Correct distance, following wall")
                 twist.linear.x = speed
                 twist.angular.z = 0.0
         
         # wall detected on front right only, turn left to find wall
         elif front > d and frontleft > d and frontright < d:
-            self.get_logger().info("Wall at front right only, fast turning left to find wall")
+            # self.get_logger().info("Wall at front right only, fast turning left to find wall")
             twist.linear.x = speed*0.5
-            twist.angular.z = fast_r # prev slow
+            twist.angular.z = fast_r
         
         # wall detected on front left and front, turn right to avoid collision
         elif front < d and frontleft < d and frontright > d:
-            self.get_logger().info("Wall at front and front left, fast turning right to avoid collision")
-            twist.linear.x = 0.0 # prev 0.5
+            # self.get_logger().info("Wall at front and front left, fast turning right to avoid collision")
+            twist.linear.x = 0.0
             twist.angular.z = -fast_r
 
         # wall detected on front and front right, turn right to avoid collision
         elif front < d and frontleft > d and frontright < d:
-            self.get_logger().info("Wall at front and front right, fast turning right to avoid collision")
+            # self.get_logger().info("Wall at front and front right, fast turning right to avoid collision")
             twist.linear.x = 0.0
             twist.angular.z = -fast_r
 
         # wall detected on all 3 sides, turn right to avoid collision and keep wall on left side
         elif front < d and frontleft < d and frontright < d:
-            self.get_logger().info("Wall in all direction, fast right to avoid collision")
+            # self.get_logger().info("Wall in all direction, fast right to avoid collision")
             twist.linear.x = 0.0
             twist.angular.z = -fast_r
+
         # wall detected on front left and front right, turn left to find wall
         elif front > d and frontleft < d and frontright < d:
             if left < d and right < d:
-                self.get_logger().info("Stuck in a corner, fast turn right to escape dead end")
+                # self.get_logger().info("Stuck in a corner, fast turn right to escape dead end")
                 twist.linear.x = 0.0
                 twist.angular.z = -fast_r
             else:
-                self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
+                # self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
                 twist.linear.x = speed*0.5
                 twist.angular.z = fast_r
-        # in event of unaccounted for cases, which should not happen
-        else:
-            self.get_logger().info("Unaccounted case, fix code")
-        
-        # update velocity of turtlebot
-        self.publisher_.publish(twist)
 
-    # algorithm to follow right wall
-    def right_follow_wall(self,stop_d, speed, slow_r, fast_r):
-        # create Twist object
-        twist = Twist()
-
-        # get distance from wall for each side
-        # set out of range values to max distance of LIDAR
-        front = np.nan_to_num(self.laser_range[FRONT], nan=3.5 ,posinf=3.5)
-        frontright = np.nan_to_num(self.laser_range[FRONT_RIGHT], nan=3.5 ,posinf=3.5)
-        frontleft = np.nan_to_num(self.laser_range[FRONT_LEFT], nan=3.5 ,posinf=3.5)
-        left = np.nan_to_num(self.laser_range[LEFT], nan=3.5 ,posinf=3.5)
-        right = np.nan_to_num(self.laser_range[RIGHT], nan=3.5 ,posinf=3.5)
-
-        self.get_logger().info("Front: %.2f Frontleft: %.2f Frontright: %.2f" % (front, frontleft, frontright))
-
-        # to calculate the diagonal stopping distance
-        d = stop_d / math.cos(math.radians(45)) + 0.05
-
-        # main logic for the wall follower algo, keeps track of right wall and follow it
-        # wall detected if < d, else not detected
-
-        # if no wall detected at all, turn right slightly to find wall
-        if front > d and frontleft > d and frontright > d:
-            self.get_logger().info("No obs at all, slow turning right to find the wall")
-            twist.linear.x = speed*0.5
-            twist.angular.z = -slow_r
-
-        # wall detected in front only, turn left to find wall on right side
-        elif front < d and frontleft > d and frontright > d:
-            self.get_logger().info("Wall in front only, fast turning left")
-            twist.linear.x = 0.0
-            twist.angular.z = fast_r
-
-        # wall detected on front right only, follow the wall
-        elif front > d and frontleft > d and frontright < d:
-            # check if bot is too close to the wall, if yes move away slightly
-            # considered too close if right side is 25cm
-            if frontright < (0.25):
-                self.get_logger().info("Too close to right wall, fast turning left slightly")
-                twist.linear.x = 0.0
-                twist.angular.z = fast_r
-            # no changes needed, continue moving forward
-            else:
-                self.get_logger().info("Correct distance, following wall")
-                twist.linear.x = speed
-                twist.angular.z = 0.0
-        
-        # wall detected on front left only, turn right to find wall
-        elif front > d and frontleft < d and frontright > d:
-            self.get_logger().info("Wall at front left only, slow turning right to find wall")
-            twist.linear.x = speed*0.5
-            twist.angular.z = -slow_r
-        
-        # wall detected on front right and front, turn left to avoid collision
-        elif front < d and frontleft > d and frontright < d:
-            self.get_logger().info("Wall at front and front right, fast turning left to avoid collision")
-            twist.linear.x = speed*0.5
-            twist.angular.z = fast_r
-
-        # wall detected on front and front left, turn left to avoid collision
-        elif front < d and frontleft < d and frontright > d:
-            self.get_logger().info("Wall at front and front left, fast turning left to avoid collision")
-            twist.linear.x = 0.0
-            twist.angular.z = fast_r
-
-        # wall detected on all 3 sides, turn left to avoid collision and keep wall on left side
-        elif front < d and frontleft < d and frontright < d:
-            self.get_logger().info("Wall in all direction, fast left to avoid collision")
-            twist.linear.x = 0.0
-            twist.angular.z = fast_r
-
-        # wall detected on front left and front right, turn left to find wall
-        elif front > d and frontleft < d and frontright < d:
-            if left < d and right < d:
-                self.get_logger().info("Stuck in a corner, fast turn left to escape dead end")
-                twist.linear.x = 0.0
-                twist.angular.z = fast_r
-            else:
-                self.get_logger().info("Wall at front left and front right, slow turning left to find wall")
-                twist.linear.x = speed*0.5
-                twist.angular.z = slow_r
-
-        # in event of unaccounted for cases, which should not happen
-        else:
-            self.get_logger().info("Unaccounted case, fix code")
-        
         # update velocity of turtlebot
         self.publisher_.publish(twist)
 
     def find_nfc(self):
         try:
-            # initialize variable to write elapsed time to file
-            # contourCheck = 1
+            # keep track of number of NFC is has detected
             num_nfc_found = 0
 
-            #  ensure data being received from LIDAR before starting
+            # ensure data being received from LIDAR before starting
             while (len(self.laser_range) == 0):
                 self.get_logger().info("Fetching LIDAR data")
                 rclpy.spin_once(self)
 
-            # Move once ready
+            # Start wall following algorithm once ready
             while rclpy.ok():
-                ## CHANGE BASED ON SCENARIO
                 self.left_follow_wall(stop_distance, speed_change, slow_rotate, fast_rotate)
-
-                if self.nfcfound == True :
+                if self.nfcfound == True:
                     self.stopbot()
                     self.get_logger().info("NFC found")
                     num_nfc_found += 1
                     self.get_logger().info("Num of NFC found: %i" % num_nfc_found)
-                    if num_nfc_found > TOTAL_NFC: # number of NFC detected in one full round
-                        # move into loading phase
+                    if num_nfc_found > TOTAL_NFC:
+                        # move into loading phase only when bot has travelled one full round
                         break
 
                 # allow the callback functions to run
@@ -526,6 +353,7 @@ class AutoNav(Node):
                 # allow the callback functions to run
                 rclpy.spin_once(self)
 
+                # bot remains stationary till balls are loaded
                 if self.buttonpressed == False:
                     self.stopbot()
                     continue
@@ -534,7 +362,6 @@ class AutoNav(Node):
                 time.sleep(2.0)
                 self.get_logger().info("Moving off now")
                 break
-                
 
         except Exception as e:
             print(e)
@@ -546,10 +373,7 @@ class AutoNav(Node):
 
     def find_thermal(self):
         try:
-            #####################################
             # Start and Format Figure 
-            #####################################
-            #
             plt.rcParams.update({'font.size':16})
             fig_dims = (12,9) # figure size
             fig,ax = plt.subplots(figsize=fig_dims) # start figure
@@ -561,23 +385,22 @@ class AutoNav(Node):
             ax_bgnd = fig.canvas.copy_from_bbox(ax.bbox) # background for speeding up runs
             fig.show() # show figure
 
-            #num_center = 0
-
             while rclpy.ok():
                 # allow the callback functions to run
                 rclpy.spin_once(self)
 
+                # prevent flywheel from starting before target is found
                 flywheel = Flywheel()
                 flywheel.start_flywheel = False
                 self.publisher_flywheel.publish(flywheel)
 
                 # waits for thermal data to be updated
                 if self.thermal_updated == False:
-                    self.get_logger().info("Waiting for new data")
+                    # self.get_logger().info("Waiting for new data")
                     continue
 
                 # Plotting in real time
-                self.get_logger().info('Redrawing image')
+                # self.get_logger().info('Redrawing image')
                 fig.canvas.restore_region(ax_bgnd) # restore background (speeds up run)
                 im1.set_data(np.reshape(self.thermalimg,pix_res)) # update plot with new temps
                 ax.draw_artist(im1) # draw image again
@@ -603,7 +426,7 @@ class AutoNav(Node):
                         col_num += 1
                     row_num += 1
                 # for checking with columns the object detected in    
-                print(("Columns found: {}").format(cols_found))
+                # print(("Columns found: {}").format(cols_found))
 
                 if len(cols_found) != 0:
                     self.thermalfound = True
@@ -613,7 +436,6 @@ class AutoNav(Node):
                 if self.thermalfound == False:
                     self.get_logger().info("Thermal object not yet found")
                     # do wall following algo to find thermal object
-                    ## CHANGE BASED ON SCENARIO
                     self.left_follow_wall(stop_distance, speed_change, slow_rotate, fast_rotate)
 
                 else:
@@ -630,7 +452,7 @@ class AutoNav(Node):
                         twist.linear.x = 0.0
                         twist.angular.z = 0.2*slow_rotate
                         time.sleep(1)
-                        self.get_logger().info("Turning left to centralise bot")
+                        # self.get_logger().info("Turning left to centralise bot")
                         self.publisher_.publish(twist)
                         self.centered = False
                         time.sleep(0.5)
@@ -640,36 +462,29 @@ class AutoNav(Node):
                         twist.linear.x = 0.0
                         twist.angular.z = -0.2*slow_rotate
                         time.sleep(1)
-                        self.get_logger().info("Turning right to centralise bot")
+                        # self.get_logger().info("Turning right to centralise bot")
                         self.publisher_.publish(twist)
                         time.sleep(0.5)
                         self.centered = False
                     else:
                         self.centered = True
                         self.stopbot()
+
                 if self.centered:
                     self.get_logger().info("Centralised")
-                    
-                    #self.rotatebot(10)
                     # if too far away, move closer to object
                     if (len(cols_found) < 3):
                         twist = Twist()
-                        twist.linear.x = 0.5 * speed_change
+                        twist.linear.x = speed_change*0.5
                         twist.angular.z = 0.0
                         time.sleep(1)
                         self.publisher_.publish(twist)
                         time.sleep(1)
                     else:
-                    #if num_center > 3:
                         self.stopbot()
                         self.get_logger().info("Correct distance away from object")
-                        break
-                    #else:
-                    #    num_center += 1
-                #else:
-                #    num_center = 0
-                    # once correct distance and centered, can move to launcher part
-                    
+                        # move on to shooting phase once ready
+                        break                    
                     
         except Exception as e:
             print(e)
@@ -679,62 +494,37 @@ class AutoNav(Node):
             # stop moving
             self.stopbot()
 
-    # function to start up the launcher and check if it is done
+    # function to start up the launcher and check if shooting is done
     def launcher(self):
         try:
+            # Start up the flywheels
             flywheel = Flywheel()
             flywheel.start_flywheel = True
             self.publisher_flywheel.publish(flywheel)
 
             while rclpy.ok():
                 rclpy.spin_once(self)
-                self.get_logger().info("Waiting for shooting to be finished")
+                # self.get_logger().info("Waiting for shooting to be finished")
                 if self.done_shooting == True:
                     self.get_logger().info("Done shooting")
                     break
 
-        #except Exception as e:
-        #print(e)
+        except Exception as e:
+            print(e)
         
         # Ctrl-c detected
         finally:
             # stop moving
             self.stopbot()
 
-    #def map_maze(self):
-    #    try:
-    #        # initialize variable to write elapsed time to file
-    #        # contourCheck = 1
-    #        #  ensure data being received from LIDAR before starting
-    #        while (len(self.laser_range) == 0):
-    #            self.get_logger().info("Fetching LIDAR data")
-    #            rclpy.spin_once(self)
-    #        # Move once ready
-    #        while rclpy.ok():
-    #            ## CHANGE BASED ON SCENARIO
-    #            self.left_follow_wall(nfc_stopdistance, nfc_speedchange, nfc_slowrotate, nfc_fastrotate)
-    #            # allow the callback functions to run
-    #            rclpy.spin_once(self)
-#
-    #    except Exception as e:
-    #        print(e)
-    #    
-    #    # Ctrl-c detected
-    #    finally:
-    #        # stop moving
-    #        self.stopbot()
-
 def main(args=None):
     rclpy.init(args=args)
 
     auto_nav = AutoNav()
-
     auto_nav.find_nfc()
     auto_nav.load_balls()
     auto_nav.find_thermal()
     auto_nav.launcher()
-    #auto_nav.map_maze()
-    #auto_nav.find_nfc()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
