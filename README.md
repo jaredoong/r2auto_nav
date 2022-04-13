@@ -63,11 +63,19 @@ turtlebot_ws
         │   └── Thermal.msg
         ├── CMakeLists.txt
         └── package.xml
+        
+test_sensors
+├── pn532
+├── amg8833_i2c.py
+├── test_button.py
+├── test_NFC.py
+├── test_servo.py
+└── test_thermalcam.py
 ```
 
 ## Important files
 * [r2wall_follower.py](https://github.com/jaredoong/r2auto_nav/blob/main/r2wall_follower.py) - This file contains the overall algorithm used for the mission. It contains subscribers that listen for the data received by the sensors, over topics in ```custom_msgs/msg```. The main function used to navigate around the maze using the left wall-following algorithm is in ```left_follow_wall()```. The important functions used to complete the tasks include ```find_nfc()```, ```load_balls()```, ```find_thermal()```, ```launcher()```.
-* [custom_msgs/msg] - This folder includes all the custom messages that are published by the nodes running on the remote laptop and the RPi in order to transmit important information. This package needs to exist on both the remote laptop and the RPi for the program to run properly. Steps for proper setup is described in detail [below](#Setting-up-software-on-remote-laptop).
+* [custom_msgs/msg](https://github.com/jaredoong/r2auto_nav/tree/main/custom_msgs/msg) - This folder includes all the custom messages that are published by the nodes running on the remote laptop and the RPi in order to transmit important information. This package needs to exist on both the remote laptop and the RPi for the program to run properly. Steps for proper setup is described in detail [below](#Setting-up-software-on-remote-laptop).
 * [sensors.py] - This file contains the code to be run on the RPi. It is in charge of publishing the data from the sensors out to the remote laptop to let the remote laptop know when one task has been completed, which enables it to give the turtlebot the command to move on to the next task.
 * [pnc532] - This folder contains the library needed to use the PN532 NFC reader in I<sup>2</sup>C mode. For ```sensors.py``` to run properly, this folder needs to be in the same directory as ```sensors.py```.
 
