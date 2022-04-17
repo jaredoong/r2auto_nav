@@ -22,7 +22,6 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 import numpy as np
 import math
-import cmath
 import time
 import matplotlib.pyplot as plt
 
@@ -35,13 +34,11 @@ speed_change = 0.20
 stop_distance = 0.35
 
 # constants
-rotatechange = 0.2
 occ_bins = [-1, 0, 100, 101]
-front_angle = 20 # min angle to prevent any collision
-front_angles = range(-front_angle,front_angle+1,1)
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
 threshold_temp = 35 # calibrated to temp of thermal object
+total_nfc = 3 # number of detectable NFC in 1 round
 FRONT = 0
 FRONT_LEFT = 45
 FRONT_FRONT_LEFT = 338
@@ -50,7 +47,6 @@ FRONT_FRONT_RIGHT = 22
 LEFT = 90
 RIGHT =270
 BACK = 180
-TOTAL_NFC = 3 # number of detectable NFC in 1 round
 
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
@@ -171,7 +167,7 @@ class AutoNav(Node):
         # calculate total number of bins
         total_bins = msg.info.width * msg.info.height
         # log the info
-        #self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
+        # self.get_logger().info('Unmapped: %i Unoccupied: %i Occupied: %i Total: %i' % (occ_counts[0][0], occ_counts[0][1], occ_counts[0][2], total_bins))
 
         # make msgdata go from 0 instead of -1, reshape into 2D
         oc2 = msgdata + 1
@@ -191,14 +187,17 @@ class AutoNav(Node):
         self.laser_range[self.laser_range==0] = np.nan
 
     def nfc_callback(self, msg):
+        # self.get_logger().info('In nfc_callback')
         self.nfcfound = msg.nfc_found
         self.get_logger().info('NFC detected: "%s"' % msg.nfc_found)
 
     def button_callback(self, msg):
+        # self.get_logger().info('In button_callback')
         self.buttonpressed = msg.button_pressed
         self.get_logger().info('Button pressed: "%s"' % msg.button_pressed)
 
     def thermal_callback(self, msg):
+        # self.get_logger().info('In thermal_callback')
         self.thermalimg = msg.thermal
         # data set into 8x8 array
         self.thermalimg = np.reshape(self.thermalimg,(8,8))
@@ -208,6 +207,7 @@ class AutoNav(Node):
         self.thermal_updated = True
 
     def launcher_callback(self, msg):
+        # self.get_logger().info('In launcher_callback')
         self.done_shooting = msg.finished_shooting
         self.get_logger().info('Finished shooting: "%s"' % msg.finished_shooting)
 
@@ -331,7 +331,7 @@ class AutoNav(Node):
                     self.get_logger().info("NFC found")
                     num_nfc_found += 1
                     self.get_logger().info("Num of NFC found: %i" % num_nfc_found)
-                    if num_nfc_found > TOTAL_NFC:
+                    if num_nfc_found > total_nfc:
                         # move into loading phase only when bot has travelled one full round
                         break
 
