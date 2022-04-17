@@ -16,7 +16,7 @@ left_flywheel_pin = 21
 right_flywheel_pin = 26
 servo_pin = 23
 num_balls = 3
-total_nfc = 1 # number of detectable NFC in maze
+total_nfc = 3 # number of detectable NFC in maze
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
