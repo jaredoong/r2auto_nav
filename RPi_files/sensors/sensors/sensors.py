@@ -16,8 +16,8 @@ left_flywheel_pin = 21
 right_flywheel_pin = 26
 servo_pin = 23
 
-NUM_BALLS = 3
-TOTAL_NFC = 1 # number of detectable NFC in maze
+num_balls = 3
+total_nfc = 1 # number of detectable NFC in maze
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP) # Set pin 10 to be an input pin and set initial value to be pulled low (off)
@@ -77,7 +77,7 @@ class NFCFinder(Node):
                 self.publisher_.publish(msg)
                 time.sleep(2.0)
 
-                if num_nfc_found > TOTAL_NFC:
+                if num_nfc_found > total_nfc:
                     break
                 # let bot pass NFC to prevent double counting
                 
@@ -141,7 +141,7 @@ class ThermalPhase(Node):
             self.flywheel_callback,
             10)
         self.aligned = False
-        self.num_balls = NUM_BALLS # based on number of balls decided
+        self.num_balls = num_balls # based on number of balls decided
         self.flywheel_subscription # prevent unused variable warning
 
         # Seting up the thermal sensor
