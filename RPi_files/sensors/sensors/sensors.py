@@ -15,7 +15,6 @@ button_pin = 15
 left_flywheel_pin = 21
 right_flywheel_pin = 26
 servo_pin = 23
-
 num_balls = 3
 total_nfc = 1 # number of detectable NFC in maze
 
