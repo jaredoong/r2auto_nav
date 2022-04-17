@@ -27,18 +27,18 @@ import matplotlib.pyplot as plt
 
 from custom_msgs.msg import Nfc, Button, Thermal, Flywheel, Launcher
 
-# parameters determining speed of bot
-slow_rotate = 0.7
-fast_rotate = 0.9
-speed_change = 0.20
-stop_distance = 0.35
+# calibration parameters
+slow_rotate = 0.7 # for rotating the bot slowly
+fast_rotate = 0.9 # for rotating the bot quickly
+speed_change = 0.20 # forward speed of the bot
+stop_distance = 0.35 # stopping distance of the bot
+threshold_temp = 35 # calibrated to temp of thermal object
+total_nfc = 3 # number of detectable NFC in 1 round
 
 # constants
 occ_bins = [-1, 0, 100, 101]
 scanfile = 'lidar.txt'
 mapfile = 'map.txt'
-threshold_temp = 35 # calibrated to temp of thermal object
-total_nfc = 3 # number of detectable NFC in 1 round
 FRONT = 0
 FRONT_LEFT = 45
 FRONT_FRONT_LEFT = 338
