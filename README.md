@@ -101,7 +101,7 @@ test_sensors
 1. Ensure that you have Ubuntu 20.04 and ROS 2 Foxy on your laptop. Refer [here](https://emanual.robotis.com/docs/en/platform/turtlebot3/quick-start/#pc-setup) on how to install the required software. Ensure that you are following the instruction under the "Foxy" tab.
 2. Test that the ROS development environment is working by ensuring that a simple working publisher and subscriber can be created using the instructions [here](https://docs.ros.org/en/foxy/Tutorials/Writing-A-Simple-Py-Publisher-And-Subscriber.html).
 3. Once the ROS development environment is working on both the remote laptop and the RPi, run the publisher from the RPi and the subscriber on the laptop, and ensure that the subscriber on the laptop replicates what is being produced by the publisher. Swap the device that the publisher and subscriber are publishing from to ensure that two-way communication between the RPi and the remote laptop can be established.
-4. For instructions on how to load the program used for the mission, refer to "Software setup" in the [documentation].
+4. For instructions on how to load the program used for the mission, refer to "Software setup" in the [documentation](https://github.com/jaredoong/r2auto_nav/blob/main/EG2310_Final%20Report.pdf).
 
 ## Setting up software on the RPi
 1. Using Ubuntu, follow the instructions [here](https://emanual.robotis.com/docs/en/platform/turtlebot3/sbc_setup/#sbc-setup) burn the ROS 2 Foxy Image to the SD card onto the RPi on the turtlebot. Follow through the "Quick Start Guide" to get a working turtlebot.
